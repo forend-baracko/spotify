@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import auth, { isFirebaseConfigured } from '../services/firebaseConfig';
 import {
@@ -16,6 +16,33 @@ export const AuthProvider = ({ children }) => {
   const [userProfile, setUserProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
+  const profileLoadId = useRef(0);
+
+  const syncAuthenticatedUser = useCallback((authUser) => {
+    const loadId = ++profileLoadId.current;
+    setUser(authUser);
+    setUserProfile(
+      authUser
+        ? {
+            uid: authUser.uid,
+            email: authUser.email,
+            displayName: authUser.displayName || authUser.email?.split('@')[0] || 'User',
+            photoURL: authUser.photoURL || null,
+            favoriteTracks: [],
+          }
+        : null
+    );
+
+    if (authUser) {
+      getUserProfile(authUser.uid, authUser)
+        .then((profile) => {
+          if (profileLoadId.current === loadId) setUserProfile(profile);
+        })
+        .catch((error) => {
+          console.warn('Error loading user profile:', error);
+        });
+    }
+  }, []);
 
   useEffect(() => {
     if (!isFirebaseConfigured() || !auth) {
@@ -23,32 +50,22 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        try {
-          const profile = await getUserProfile(currentUser.uid);
-          setUserProfile(profile);
-        } catch (e) {
-          console.warn('Error loading user profile:', e);
-          setUserProfile(null);
-        }
-      } else {
-        setUserProfile(null);
-      }
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      syncAuthenticatedUser(currentUser);
       setIsLoading(false);
     });
 
-    return () => unsubscribe();
-  }, []);
+    return () => {
+      profileLoadId.current += 1;
+      unsubscribe();
+    };
+  }, [syncAuthenticatedUser]);
 
   const login = async (email, password) => {
     setAuthError(null);
     try {
       const loggedInUser = await loginWithEmail(email, password);
-      setUser(loggedInUser);
-      const profile = await getUserProfile(loggedInUser.uid);
-      setUserProfile(profile);
+      syncAuthenticatedUser(loggedInUser);
       return loggedInUser;
     } catch (error) {
       setAuthError(error.message);
@@ -60,9 +77,7 @@ export const AuthProvider = ({ children }) => {
     setAuthError(null);
     try {
       const newUser = await registerWithEmail(email, password, displayName);
-      setUser(newUser);
-      const profile = await getUserProfile(newUser.uid);
-      setUserProfile(profile);
+      syncAuthenticatedUser(newUser);
       return newUser;
     } catch (error) {
       setAuthError(error.message);
@@ -74,9 +89,7 @@ export const AuthProvider = ({ children }) => {
     setAuthError(null);
     try {
       const loggedInUser = await loginWithGoogle();
-      setUser(loggedInUser);
-      const profile = await getUserProfile(loggedInUser.uid);
-      setUserProfile(profile);
+      syncAuthenticatedUser(loggedInUser);
       return loggedInUser;
     } catch (error) {
       setAuthError(error.message);
@@ -88,8 +101,7 @@ export const AuthProvider = ({ children }) => {
     setAuthError(null);
     try {
       await logoutUser();
-      setUser(null);
-      setUserProfile(null);
+      syncAuthenticatedUser(null);
     } catch (error) {
       setAuthError(error.message);
       throw error;

@@ -10,7 +10,6 @@ import {
 import { COLORS, SPACE, RADIUS } from '../../constants/theme';
 import { useMusic } from '../../context/MusicContext';
 import CreatePlaylistModal from './CreatePlaylistModal';
-import MusicApiLibrarySection from './MusicApiLibrarySection';
 
 export const LibraryView = ({
     onOpenPlaylist,
@@ -94,8 +93,6 @@ export const LibraryView = ({
                     );
                 })}
 
-                <MusicApiLibrarySection
-                />
             </ScrollView>
 
             {/* Create Playlist Modal */}

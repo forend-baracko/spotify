@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-    SafeAreaView,
     View,
     Text,
     TextInput,
@@ -12,6 +11,7 @@ import {
     ScrollView,
     Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACE, RADIUS } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 
@@ -174,16 +174,17 @@ const LoginScreen = ({ navigation }) => {
                     </View>
 
                     {/* Register Switch */}
-                    <View style={styles.footer}>
-                        <Text style={styles.footerText}>Don't have an account?</Text>
-                        <TouchableOpacity
-                            onPress={() => navigation?.navigate('Register')}
-                            style={styles.signupButton}
-                        >
-                            <Text style={styles.signupText}>Sign up for Spotify</Text>
-                        </TouchableOpacity>
-                    </View>
                 </ScrollView>
+                <View style={styles.footer}>
+                    <Text style={styles.footerText}>Don't have an account?</Text>
+                    <TouchableOpacity
+                        onPress={() => navigation?.navigate('Register')}
+                        style={styles.signupButton}
+                        accessibilityRole="button"
+                    >
+                        <Text style={styles.signupText}>Sign up</Text>
+                    </TouchableOpacity>
+                </View>
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
@@ -200,19 +201,19 @@ const styles = StyleSheet.create({
     scrollContent: {
         flexGrow: 1,
         paddingHorizontal: SPACE.lg,
-        paddingTop: SPACE.xl,
-        paddingBottom: SPACE.xl,
+        paddingTop: SPACE.md,
+        paddingBottom: SPACE.md,
         justifyContent: 'center',
     },
     header: {
         alignItems: 'center',
-        marginBottom: SPACE.xl,
+        marginBottom: SPACE.md,
     },
     logo: {
-        width: 64,
-        height: 64,
+        width: 52,
+        height: 52,
         resizeMode: 'contain',
-        marginBottom: SPACE.md,
+        marginBottom: SPACE.sm,
     },
     title: {
         color: COLORS.textPrimary,
@@ -226,7 +227,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderRadius: RADIUS.sm,
         padding: SPACE.md,
-        marginBottom: SPACE.lg,
+        marginBottom: SPACE.md,
     },
     configNoticeTitle: {
         color: COLORS.primary,
@@ -249,7 +250,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderRadius: RADIUS.sm,
         padding: SPACE.md,
-        marginBottom: SPACE.lg,
+        marginBottom: SPACE.md,
     },
     errorText: {
         color: COLORS.error,
@@ -258,7 +259,7 @@ const styles = StyleSheet.create({
     },
     form: {
         width: '100%',
-        marginBottom: SPACE.xl,
+        marginBottom: SPACE.md,
     },
     label: {
         color: COLORS.textPrimary,
@@ -348,13 +349,19 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     footer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
         alignItems: 'center',
-        marginTop: SPACE.md,
+        paddingHorizontal: SPACE.lg,
+        paddingTop: SPACE.sm,
+        paddingBottom: SPACE.md,
+        borderTopWidth: 1,
+        borderTopColor: COLORS.border,
     },
     footerText: {
         color: COLORS.textSecondary,
         fontSize: 14,
-        marginBottom: SPACE.xs,
+        marginRight: SPACE.xs,
     },
     signupButton: {
         padding: SPACE.xs,

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-    SafeAreaView,
     View,
     Text,
     TextInput,
@@ -12,6 +11,7 @@ import {
     ScrollView,
     Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACE, RADIUS } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 

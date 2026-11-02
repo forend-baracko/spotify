@@ -27,6 +27,11 @@ import PlaylistDetailModal from '../components/playlists/PlaylistDetailModal';
 import AddToPlaylistModal from '../components/playlists/AddToPlaylistModal';
 import QueueModal from '../components/player/QueueModal';
 import TrackActionSheetModal from '../components/player/TrackActionSheetModal';
+import ProfileDrawer from '../components/profile/ProfileDrawer';
+import ProfileDetailsModal from '../components/profile/ProfileDetailsModal';
+import UserStatsModal from '../components/profile/UserStatsModal';
+import RecentPlayedModal from '../components/social/RecentPlayedModal';
+import SettingsModal from '../components/settings/SettingsModal';
 import * as AuthContextModule from '../context/AuthContext';
 import { useMusic } from '../context/MusicContext';
 
@@ -128,6 +133,11 @@ const HomeScreen = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState(TABS.HOME);
   const [homeFilter, setHomeFilter] = useState('All');
   const [isPlayerModalOpen, setIsPlayerModalOpen] = useState(false);
+  const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
+  const [isRecentsModalOpen, setIsRecentsModalOpen] = useState(false);
+  const [isProfileDetailsOpen, setIsProfileDetailsOpen] = useState(false);
+  const [isListeningStatsOpen, setIsListeningStatsOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   const currentUser = authContextValue?.user || authContextValue?.userProfile || null;
   const selectedPlaylist =
@@ -401,14 +411,18 @@ const HomeScreen = ({ navigation }) => {
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <View style={styles.searchHeader}>
               <View style={styles.searchHeaderLeft}>
-                <View style={styles.miniAvatar}>
+                <TouchableOpacity
+                  style={styles.miniAvatar}
+                  onPress={() => setIsProfileDrawerOpen(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open your profile menu"
+                >
                   <Text style={styles.miniAvatarText}>
                     {userName.charAt(0).toUpperCase()}
                   </Text>
-                </View>
+                </TouchableOpacity>
                 <Text style={styles.searchTitle}>Search</Text>
               </View>
-              <Text style={styles.cameraIcon}>📷</Text>
             </View>
 
             <View style={styles.whiteSearchBar}>
@@ -420,7 +434,6 @@ const HomeScreen = ({ navigation }) => {
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 returnKeyType="search"
-                autoFocus
                 accessibilityLabel="Search songs, artists, or albums"
               />
               {searchQuery ? (
@@ -557,11 +570,15 @@ const HomeScreen = ({ navigation }) => {
             <View style={styles.homeFilterRow}>
               <TouchableOpacity
                 style={styles.homeAvatar}
-                onPress={() => handleSelectTab(TABS.LIBRARY)}
-                accessibilityLabel="Open your library"
+                onPress={() => setIsProfileDrawerOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Open your profile menu"
               >
-                {currentUser?.photoURL ? (
-                  <Image source={{ uri: currentUser.photoURL }} style={styles.homeAvatarImage} />
+                {currentUser?.photoURL || authContextValue?.userProfile?.photoURL ? (
+                  <Image
+                    source={{ uri: currentUser?.photoURL || authContextValue.userProfile.photoURL }}
+                    style={styles.homeAvatarImage}
+                  />
                 ) : (
                   <Text style={styles.avatarText}>{userName.charAt(0).toUpperCase()}</Text>
                 )}
@@ -1083,6 +1100,58 @@ const HomeScreen = ({ navigation }) => {
         isInPlaylist={!!actionTrackPlaylistId}
       />
 
+      <ProfileDrawer
+        visible={isProfileDrawerOpen}
+        onClose={() => setIsProfileDrawerOpen(false)}
+        user={authContextValue?.user}
+        userProfile={authContextValue?.userProfile}
+        onLogout={handleSignOut}
+        onOpenProfile={() => setIsProfileDetailsOpen(true)}
+        onOpenRecents={() => setIsRecentsModalOpen(true)}
+        onOpenStats={() => setIsListeningStatsOpen(true)}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
+      />
+
+      <ProfileDetailsModal
+        visible={isProfileDetailsOpen}
+        onClose={() => setIsProfileDetailsOpen(false)}
+        user={authContextValue?.user}
+        userProfile={authContextValue?.userProfile}
+      />
+
+      <UserStatsModal
+        visible={isListeningStatsOpen}
+        onClose={() => setIsListeningStatsOpen(false)}
+        user={authContextValue?.user}
+        userProfile={authContextValue?.userProfile}
+        recentTracks={musicContext.recentTracks}
+      />
+
+      <RecentPlayedModal
+        visible={isRecentsModalOpen}
+        onClose={() => setIsRecentsModalOpen(false)}
+        recentTracks={musicContext.recentTracks}
+        onPlayTrack={(track) => handlePlayTrack(track, musicContext.recentTracks)}
+        currentTrack={currentTrack}
+        onOpenTrackMenu={handleOpenTrackActions}
+        onAddToQueue={musicContext.addToQueue}
+        onAddToPlaylist={handleOpenAddToPlaylist}
+        onToggleFavorite={musicContext.toggleLikeTrack}
+        isLiked={musicContext.isLiked}
+      />
+
+      <SettingsModal
+        visible={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        user={authContextValue?.user}
+        userProfile={authContextValue?.userProfile}
+        onLogout={handleSignOut}
+        onOpenProfile={() => setIsProfileDetailsOpen(true)}
+        privateSession={musicContext.privateSession}
+        onSetPrivateSession={musicContext.setPrivateSession}
+        onClearHistory={musicContext.clearRecentTracks}
+      />
+
       {/* Bottom Bar Integration */}
       <BottomNavBar
         activeTab={activeTab}
@@ -1463,10 +1532,6 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 22,
     fontWeight: 'bold',
-  },
-  cameraIcon: {
-    color: '#FFF',
-    fontSize: 18,
   },
   whiteSearchBar: {
     flexDirection: 'row',

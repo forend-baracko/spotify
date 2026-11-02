@@ -8,6 +8,7 @@ import {
     AUDIOMACK_API_KEY,
     AUDIO_API_BASE_URL,
     GOOGLE_WEB_CLIENT_ID,
+    GOOGLE_IOS_CLIENT_ID,
 } from '@env';
 
 /**
@@ -44,4 +45,7 @@ export const AUDIO_CONFIG = {
 const rawGoogleClientId = GOOGLE_WEB_CLIENT_ID || '1059014495317-3c5mamk6f5i6rt7dbj1ffadi61oo18nh.apps.googleusercontent.com';
 export const GOOGLE_CONFIG = {
     webClientId: rawGoogleClientId ? rawGoogleClientId.replace(/^["']|["']$/g, '').trim() : '',
+    iosClientId: GOOGLE_IOS_CLIENT_ID
+        ? GOOGLE_IOS_CLIENT_ID.replace(/^["']|["']$/g, '').trim()
+        : '',
 };

@@ -11,6 +11,7 @@ const STORAGE_KEYS = {
     LIKED_TRACKS: '@spotify_liked_tracks_v2',
     RECENTS: '@spotify_recents_v2',
     USER_QUEUE: '@spotify_user_queue_v2',
+    PRIVATE_SESSION: '@spotify_private_session_v1',
 };
 
 // Initial default curated playlists
@@ -77,6 +78,8 @@ export const MusicProvider = ({ children }) => {
     const [likedTrackIds, setLikedTrackIds] = useState([]);
     const [userQueue, setUserQueue] = useState([]);
     const [recentTracks, setRecentTracks] = useState([]);
+    const [privateSession, setPrivateSessionState] = useState(false);
+    const [isPrivateSessionLoaded, setIsPrivateSessionLoaded] = useState(false);
     const [toast, setToast] = useState(null); // { message, icon, id }
 
     // Load persisted state on mount
@@ -85,6 +88,11 @@ export const MusicProvider = ({ children }) => {
             try {
                 const storedPlaylists = await AsyncStorage.getItem(STORAGE_KEYS.PLAYLISTS);
                 const storedRecents = await AsyncStorage.getItem(STORAGE_KEYS.RECENTS);
+                const storedPrivateSession = await AsyncStorage.getItem(STORAGE_KEYS.PRIVATE_SESSION);
+                if (storedPrivateSession !== null) {
+                    setPrivateSessionState(JSON.parse(storedPrivateSession) === true);
+                }
+                setIsPrivateSessionLoaded(true);
                 const parsedStoredPlaylists = storedPlaylists
                     ? JSON.parse(storedPlaylists)
                     : [];
@@ -200,6 +208,7 @@ export const MusicProvider = ({ children }) => {
                 }
             } catch (err) {
                 console.warn('Error loading persisted music data:', err);
+                setIsPrivateSessionLoaded(true);
             }
         };
 
@@ -418,7 +427,7 @@ export const MusicProvider = ({ children }) => {
 
     // Record played track (recents + stats)
     const recordTrackPlayed = useCallback(async (track) => {
-        if (!track) return;
+        if (!track || !isPrivateSessionLoaded || privateSession) return;
         const entry = {
             ...track,
             playedAt: Date.now(),
@@ -427,9 +436,31 @@ export const MusicProvider = ({ children }) => {
         setRecentTracks(prev => {
             const filtered = prev.filter(t => t.id !== track.id);
             const updated = [entry, ...filtered].slice(0, 30);
-            AsyncStorage.setItem(STORAGE_KEYS.RECENTS, JSON.stringify(updated)).catch(() => {});
+            AsyncStorage.setItem(STORAGE_KEYS.RECENTS, JSON.stringify(updated)).catch((error) => {
+                console.warn('Could not save recent listening history:', error);
+            });
             return updated;
         });
+    }, [isPrivateSessionLoaded, privateSession]);
+
+    const setPrivateSession = useCallback(async (enabled) => {
+        try {
+            await AsyncStorage.setItem(STORAGE_KEYS.PRIVATE_SESSION, JSON.stringify(enabled));
+            setPrivateSessionState(enabled);
+        } catch (error) {
+            console.warn('Could not save private session setting:', error);
+            throw error;
+        }
+    }, []);
+
+    const clearRecentTracks = useCallback(async () => {
+        try {
+            await AsyncStorage.removeItem(STORAGE_KEYS.RECENTS);
+            setRecentTracks([]);
+        } catch (error) {
+            console.warn('Could not clear recent listening history:', error);
+            throw error;
+        }
     }, []);
 
     // Safe listener subscription for audioPlayer
@@ -465,6 +496,9 @@ export const MusicProvider = ({ children }) => {
         clearQueue,
         recentTracks,
         recordTrackPlayed,
+        privateSession,
+        setPrivateSession,
+        clearRecentTracks,
         toast,
         showToast,
     };

@@ -11,13 +11,14 @@ import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-si
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 import { GOOGLE_CONFIG } from '../constants/config';
 
-// Configure Google Sign-In with webClientId if provided
+// The configured web client ID must match the OAuth client from Firebase.
 export const configureGoogleSignIn = () => {
     if (GOOGLE_CONFIG.webClientId) {
         try {
             GoogleSignin.configure({
                 webClientId: GOOGLE_CONFIG.webClientId,
-                offlineAccess: true,
+                ...(GOOGLE_CONFIG.iosClientId ? { iosClientId: GOOGLE_CONFIG.iosClientId } : {}),
+                offlineAccess: false,
                 scopes: ['profile', 'email'],
             });
         } catch (err) {
@@ -48,6 +49,10 @@ export const getReadableAuthError = (errorCode) => {
             return 'Too many failed login attempts. Please try again later.';
         case 'auth/network-request-failed':
             return 'Network error. Please check your internet connection.';
+        case 'auth/operation-not-allowed':
+            return 'Google sign-in is disabled. Enable Google as a sign-in provider in Firebase Console.';
+        case 'auth/invalid-api-key':
+            return 'Firebase rejected the app configuration. Check the Firebase API key in your app settings.';
         default:
             return 'An unexpected error occurred. Please try again.';
     }
@@ -69,32 +74,37 @@ export const registerWithEmail = async (email, password, displayName) => {
         throw new Error('Firebase credentials not configured. Please check your .env file.');
     }
 
+    let user;
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        const user = userCredential.user;
-
-        if (displayName) {
-            await updateProfile(user, { displayName: displayName.trim() });
-        }
-
-        // Save user profile in Cloud Firestore
-        if (db) {
-            await setDoc(doc(db, 'users', user.uid), {
-                uid: user.uid,
-                email: user.email,
-                displayName: displayName ? displayName.trim() : email.split('@')[0],
-                createdAt: serverTimestamp(),
-                favoriteTracks: [],
-            });
-        }
-
-        return user;
+        user = userCredential.user;
     } catch (error) {
         const readableMessage = getReadableAuthError(error.code);
         const enhancedError = new Error(readableMessage);
         enhancedError.code = error.code;
         throw enhancedError;
     }
+
+    const profileName = displayName?.trim() || email.trim().split('@')[0];
+    if (displayName) {
+        try {
+            updateProfile(user, { displayName: profileName }).catch((error) => {
+                console.warn('Failed to update the Firebase Auth display name:', error);
+            });
+        } catch (error) {
+            console.warn('Failed to update the Firebase Auth display name:', error);
+        }
+    }
+
+    saveUserProfile(user.uid, {
+        uid: user.uid,
+        email: user.email,
+        displayName: profileName,
+        createdAt: serverTimestamp(),
+        favoriteTracks: [],
+    });
+
+    return user;
 };
 
 /**
@@ -138,30 +148,32 @@ export const loginWithGoogle = async () => {
         configureGoogleSignIn();
         await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
         const signInResult = await GoogleSignin.signIn();
-        const idToken = signInResult.data?.idToken || signInResult.idToken;
+        if (signInResult.type === 'cancelled') {
+            throw new Error('Google sign-in was cancelled.');
+        }
+        const idToken = signInResult.data?.idToken;
 
         if (!idToken) {
-            throw new Error('Failed to retrieve ID token from Google.');
+            throw new Error(
+                'Google did not return an ID token. Check that GOOGLE_WEB_CLIENT_ID is the Web OAuth client ID from Firebase.'
+            );
         }
 
         const credential = GoogleAuthProvider.credential(idToken);
         const userCredential = await signInWithCredential(auth, credential);
         const user = userCredential.user;
 
-        // Upsert user profile in Firestore
-        if (db) {
-            await setDoc(
-                doc(db, 'users', user.uid),
-                {
-                    uid: user.uid,
-                    email: user.email,
-                    displayName: user.displayName || user.email?.split('@')[0] || 'User',
-                    photoURL: user.photoURL || null,
-                    updatedAt: serverTimestamp(),
-                },
-                { merge: true }
-            );
-        }
+        saveUserProfile(
+            user.uid,
+            {
+                uid: user.uid,
+                email: user.email,
+                displayName: user.displayName || user.email?.split('@')[0] || 'User',
+                photoURL: user.photoURL || null,
+                updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+        );
 
         return user;
     } catch (error) {
@@ -171,6 +183,14 @@ export const loginWithGoogle = async () => {
             throw new Error('Google sign-in is already in progress.');
         } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
             throw new Error('Google Play Services not available or outdated.');
+        }
+        if (error.code === 'DEVELOPER_ERROR' || error.code === '10') {
+            throw new Error(
+                'Google sign-in is misconfigured. Verify the Android package name and SHA-1 certificate fingerprints in Firebase, then download the updated google-services.json.'
+            );
+        }
+        if (error.code === 'auth/operation-not-allowed') {
+            throw new Error(getReadableAuthError(error.code));
         }
         throw new Error(error.message || 'Google sign-in failed.');
     }
@@ -193,17 +213,35 @@ export const logoutUser = async () => {
 /**
  * Fetch extended user profile from Cloud Firestore
  */
-export const getUserProfile = async (uid) => {
-    if (!db || !uid) return null;
+export const getUserProfile = async (uid, authUser) => {
+    if (!uid) return null;
+    const fallbackProfile = {
+        uid,
+        email: authUser?.email || null,
+        displayName: authUser?.displayName || authUser?.email?.split('@')[0] || 'User',
+        photoURL: authUser?.photoURL || null,
+        favoriteTracks: [],
+    };
+    if (!db) return fallbackProfile;
+
     try {
         const docRef = doc(db, 'users', uid);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-            return docSnap.data();
+            return { ...fallbackProfile, ...docSnap.data() };
         }
-        return null;
+        return fallbackProfile;
     } catch (err) {
         console.warn('Failed to fetch user profile:', err);
-        return null;
+        return fallbackProfile;
+    }
+};
+
+const saveUserProfile = async (uid, profile, options) => {
+    if (!db) return;
+    try {
+        await setDoc(doc(db, 'users', uid), profile, options);
+    } catch (error) {
+        console.warn('Failed to save the Firestore user profile:', error);
     }
 };
