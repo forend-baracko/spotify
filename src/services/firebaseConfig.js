@@ -40,3 +40,4 @@ if (isFirebaseConfigured()) {
 }
 
 export { app, auth, db };
+export default auth;

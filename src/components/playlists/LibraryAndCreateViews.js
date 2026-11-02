@@ -13,6 +13,7 @@ import CreatePlaylistModal from './CreatePlaylistModal';
 
 export const LibraryView = ({
     onOpenPlaylist,
+    userProfile,
 }) => {
     const { playlists, createPlaylist } = useMusic();
     const [selectedChip, setSelectedChip] = useState('Playlists');
@@ -100,12 +101,13 @@ export const LibraryView = ({
                 visible={isCreateModalOpen}
                 onClose={() => setIsCreateModalOpen(false)}
                 onCreate={handleCreatePlaylist}
+                userProfile={userProfile}
             />
         </View>
     );
 };
 
-export const CreateView = ({ onOpenPlaylist, onSwitchToLibrary }) => {
+export const CreateView = ({ onOpenPlaylist, onSwitchToLibrary, userProfile }) => {
     const { createPlaylist } = useMusic();
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
@@ -180,6 +182,7 @@ export const CreateView = ({ onOpenPlaylist, onSwitchToLibrary }) => {
                 visible={isCreateModalOpen}
                 onClose={() => setIsCreateModalOpen(false)}
                 onCreate={handleCreatePlaylist}
+                userProfile={userProfile}
             />
         </View>
     );

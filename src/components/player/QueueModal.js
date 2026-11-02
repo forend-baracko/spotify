@@ -89,7 +89,7 @@ export default function QueueModal({ visible, onClose }) {
   const nowPlayingItem = queue[currentIndex];
   const upcomingQueue = queue
     .map((item, queueIndex) => ({ item, queueIndex }))
-    .filter(({ queueIndex }) => queueIndex !== currentIndex);
+    .filter(({ queueIndex }) => queueIndex > currentIndex);
 
   return (
     <Modal
@@ -105,7 +105,7 @@ export default function QueueModal({ visible, onClose }) {
             <Text style={styles.closeBtnText}>✕</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Queue</Text>
-          {queue.length > 1 ? (
+          {upcomingQueue.length > 0 ? (
             <TouchableOpacity onPress={handleClearQueue} style={styles.clearBtn}>
               <Text style={styles.clearText}>Clear</Text>
             </TouchableOpacity>

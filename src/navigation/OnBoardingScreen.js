@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
 import { COLORS, RADIUS, SPACE } from '../constants/theme';
+import { useAuth } from '../context/AuthContext';
 import PageOne from '../components/onboarding/PageOne';
 import PageTwo from '../components/onboarding/PageTwo';
 import PageThree from '../components/onboarding/PageThree';
 
 export default function OnBoardingScreen({ navigation }) {
+    const { completeOnboarding } = useAuth();
     const [currentPage, setCurrentPage] = useState(1);
 
     const finishOnboarding = () => {
+        completeOnboarding?.();
         if (navigation?.replace) {
             navigation.replace('Login');
         } else if (navigation?.navigate) {

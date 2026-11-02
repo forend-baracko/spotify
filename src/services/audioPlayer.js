@@ -23,6 +23,8 @@ class AudioPlayerService {
     this.progressTimer = null;
     this.isTransitioning = false;
     this.playbackRequestId = 0;
+    this.userQueueCount = 0;
+    this.catalogProvider = null;
   }
 
   // --- Listener System ---
@@ -55,50 +57,98 @@ class AudioPlayerService {
   }
 
   // --- Queue State & Helpers ---
+  setCatalogProvider(provider) {
+    this.catalogProvider = provider;
+  }
+
   setQueue(tracks = [], startIndex = 0) {
-    this.queue = Array.isArray(tracks) ? tracks : [];
+    this.queue = Array.isArray(tracks) ? [...tracks] : [];
     this.currentIndex = Math.max(0, Math.min(startIndex, this.queue.length - 1));
+    this.userQueueCount = 0;
     this.emit('queue', { queue: this.queue });
   }
 
-  setQueueForTrack(track, tracks = []) {
+  // Play an entire playlist in exact order from specified startIndex
+  playPlaylist(tracks = [], startIndex = 0) {
+    if (!Array.isArray(tracks) || tracks.length === 0) return;
+    const validIndex = Math.max(0, Math.min(startIndex, tracks.length - 1));
+    this.setQueue(tracks, validIndex);
+    const targetTrack = tracks[validIndex];
+    if (targetTrack) {
+      this.playTrack(targetTrack);
+    }
+  }
+
+  // Add a track into the queue to be played NEXT
+  addToQueueNext(track) {
     if (!track) return;
+    const insertIndex = this.currentIndex + 1 + (this.userQueueCount || 0);
+    this.queue.splice(insertIndex, 0, track);
+    this.userQueueCount = (this.userQueueCount || 0) + 1;
+    this.emit('queue', { queue: this.queue });
+  }
 
-    const uniqueTracks = [];
-    const seenTrackIds = new Set();
-    tracks.forEach((queuedTrack) => {
-      if (!queuedTrack) return;
-      const key = queuedTrack.id ?? queuedTrack;
-      if (!seenTrackIds.has(key)) {
-        seenTrackIds.add(key);
-        uniqueTracks.push(queuedTrack);
+  // Queue tracks preserving original context order unless shuffle is requested
+  setQueueForTrack(track, tracks = [], shouldShuffle = false) {
+    if (!track) return;
+    this.userQueueCount = 0;
+    const trackList = Array.isArray(tracks) && tracks.length > 0 ? [...tracks] : [track];
+    const targetIndex = trackList.findIndex((t) => t?.id === track.id);
+
+    if (shouldShuffle || this.isShuffle) {
+      const remainingTracks = trackList.filter((t) => t?.id !== track.id);
+      for (let index = remainingTracks.length - 1; index > 0; index -= 1) {
+        const randomIndex = Math.floor(Math.random() * (index + 1));
+        [remainingTracks[index], remainingTracks[randomIndex]] = [
+          remainingTracks[randomIndex],
+          remainingTracks[index],
+        ];
       }
-    });
+      this.setQueue([track, ...remainingTracks], 0);
+    } else {
+      // PRESERVE PLAYLIST / CONTEXT ORDER
+      if (targetIndex !== -1) {
+        this.setQueue(trackList, targetIndex);
+      } else {
+        this.setQueue([track, ...trackList], 0);
+      }
+    }
+  }
 
-    const remainingTracks = uniqueTracks.filter(
-      (queuedTrack) =>
-        queuedTrack !== track &&
-        (track.id == null || queuedTrack.id !== track.id)
-    );
-    if (
-      !uniqueTracks.some(
-        (queuedTrack) =>
-          queuedTrack === track ||
-          (track.id != null && queuedTrack.id === track.id)
-      )
-    ) {
-      remainingTracks.push(track);
+  // If there is only 1 or fewer songs left upcoming in the queue, add 10 more songs automatically
+  checkAndReplenishQueue() {
+    const upcomingRemaining = this.queue.length - (this.currentIndex + 1);
+    if (upcomingRemaining <= 1) {
+      this.replenishQueue(10);
+    }
+  }
+
+  replenishQueue(count = 10) {
+    let pool = [];
+    if (typeof this.catalogProvider === 'function') {
+      try {
+        pool = this.catalogProvider() || [];
+      } catch (err) {
+        console.warn('Error fetching catalog for replenishment:', err);
+      }
+    }
+    if (!pool || pool.length === 0) {
+      pool = this.queue.length > 0 ? this.queue : [];
+    }
+    if (pool.length === 0) return;
+
+    const currentTrackId = this.currentTrack?.id;
+    const candidates = pool.filter((t) => t && t.id !== currentTrackId);
+    const sourcePool = candidates.length > 0 ? candidates : pool;
+
+    const newTracks = [];
+    const shuffled = [...sourcePool].sort(() => Math.random() - 0.5);
+    for (let i = 0; i < count; i += 1) {
+      newTracks.push(shuffled[i % shuffled.length]);
     }
 
-    for (let index = remainingTracks.length - 1; index > 0; index -= 1) {
-      const randomIndex = Math.floor(Math.random() * (index + 1));
-      [remainingTracks[index], remainingTracks[randomIndex]] = [
-        remainingTracks[randomIndex],
-        remainingTracks[index],
-      ];
-    }
-
-    this.setQueue([track, ...remainingTracks], 0);
+    this.queue = [...this.queue, ...newTracks];
+    this.emit('queue', { queue: this.queue });
   }
 
   shuffleUpcomingTracks() {
@@ -330,6 +380,7 @@ class AudioPlayerService {
     if (this.repeatMode === REPEAT_MODE.ONE) {
       this.playTrack(this.currentTrack);
     } else {
+      this.checkAndReplenishQueue();
       this.playNext();
     }
   }
@@ -408,21 +459,33 @@ class AudioPlayerService {
   async playNext() {
     if (!this.queue || this.queue.length === 0) return;
 
+    if (this.userQueueCount > 0) {
+      this.userQueueCount -= 1;
+    }
+
     let nextIndex = this.currentIndex + 1;
     if (nextIndex >= this.queue.length) {
       if (this.repeatMode === REPEAT_MODE.ALL) {
         nextIndex = 0;
       } else {
-        this.hardStopPreviousSound();
-        this.isPlaying = false;
-        this.currentTime = 0;
-        this.emit('status');
-        return;
+        // Automatically replenish if reaching the end
+        this.checkAndReplenishQueue();
+        if (nextIndex >= this.queue.length) {
+          this.hardStopPreviousSound();
+          this.isPlaying = false;
+          this.currentTime = 0;
+          this.emit('status');
+          return;
+        }
       }
     }
 
     this.currentIndex = nextIndex;
     const nextTrack = this.queue[nextIndex];
+
+    // If only 1 song left ahead, auto-add 10 more songs
+    this.checkAndReplenishQueue();
+
     if (nextTrack) {
       await this.playTrack(nextTrack);
     }

@@ -11,11 +11,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const ProfileDetailsModal = ({ visible, onClose, user, userProfile }) => {
   const insets = useSafeAreaInsets();
+  const username = userProfile?.username || null;
   const name =
+    userProfile?.username ||
     userProfile?.displayName ||
     user?.displayName ||
     user?.email?.split('@')[0] ||
-    'Music fan';
+    'User';
   const photoURL = userProfile?.photoURL || user?.photoURL;
 
   return (
@@ -47,6 +49,7 @@ const ProfileDetailsModal = ({ visible, onClose, user, userProfile }) => {
             </View>
           )}
           <Text style={styles.name}>{name}</Text>
+          {username ? <Text style={styles.usernameTag}>@{username}</Text> : null}
           <Text style={styles.email}>{user?.email || 'Email unavailable'}</Text>
           <Text style={styles.description}>
             Your Spotibai account profile
@@ -108,6 +111,12 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     marginTop: 18,
+  },
+  usernameTag: {
+    color: '#1DB954',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 4,
   },
   email: {
     color: '#B3B3B3',

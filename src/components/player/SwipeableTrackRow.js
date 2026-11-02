@@ -77,21 +77,16 @@ const SwipeableTrackRow = ({
 
                 // 1. Swiping RIGHT -> Add to Queue
                 if (totalX > SWIPE_RIGHT_ACTION_THRESHOLD) {
-                    // Trigger queue action
                     if (onAddToQueue) onAddToQueue(track);
                     resetPosition();
                     return;
                 }
 
-                // 2. Swiping LEFT -> Reveal the two squares (Playlist & Favorite)
-                if (totalX < -50) {
-                    // Snap open to show both squares
-                    Animated.spring(panX, {
-                        toValue: SWIPE_LEFT_MAX,
-                        useNativeDriver: true,
-                        tension: 200,
-                        friction: 20,
-                    }).start();
+                // 2. Swiping LEFT -> Open Add to Playlist
+                if (totalX < -60) {
+                    resetPosition(() => {
+                        if (onAddToPlaylist) onAddToPlaylist(track);
+                    });
                     return;
                 }
 

@@ -7,6 +7,7 @@ import {
     signInWithCredential,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 import { GOOGLE_CONFIG } from '../constants/config';
@@ -96,13 +97,20 @@ export const registerWithEmail = async (email, password, displayName) => {
         }
     }
 
-    saveUserProfile(user.uid, {
-        uid: user.uid,
-        email: user.email,
-        displayName: profileName,
-        createdAt: serverTimestamp(),
-        favoriteTracks: [],
-    });
+    // Initialize user profile document in Firestore
+    if (db && user?.uid) {
+        try {
+            await setDoc(doc(db, 'users', user.uid), {
+                uid: user.uid,
+                email: email.trim(),
+                displayName: profileName,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+            }, { merge: true });
+        } catch (error) {
+            console.warn('Firestore initial user doc creation error:', error);
+        }
+    }
 
     return user;
 };
@@ -163,17 +171,21 @@ export const loginWithGoogle = async () => {
         const userCredential = await signInWithCredential(auth, credential);
         const user = userCredential.user;
 
-        saveUserProfile(
-            user.uid,
-            {
-                uid: user.uid,
-                email: user.email,
-                displayName: user.displayName || user.email?.split('@')[0] || 'User',
-                photoURL: user.photoURL || null,
-                updatedAt: serverTimestamp(),
-            },
-            { merge: true }
-        );
+        // Ensure user document exists in Firestore asynchronously (non-blocking)
+        if (db && user?.uid) {
+            setDoc(
+                doc(db, 'users', user.uid),
+                {
+                    uid: user.uid,
+                    email: user.email || '',
+                    photoURL: user.photoURL || null,
+                    updatedAt: serverTimestamp(),
+                },
+                { merge: true }
+            ).catch((fsErr) => {
+                console.warn('Firestore google user doc sync warning:', fsErr);
+            });
+        }
 
         return user;
     } catch (error) {
@@ -210,38 +222,196 @@ export const logoutUser = async () => {
     }
 };
 
+const LOCAL_USER_PREFIX = '@spotibai_user_profile_';
+
 /**
- * Fetch extended user profile from Cloud Firestore
+ * Fetch extended user profile from Cloud Firestore, Firebase Auth, and AsyncStorage.
+ * Ensures the username is permanently saved and retrieved even after sign out.
  */
 export const getUserProfile = async (uid, authUser) => {
     if (!uid) return null;
-    const fallbackProfile = {
-        uid,
-        email: authUser?.email || null,
-        displayName: authUser?.displayName || authUser?.email?.split('@')[0] || 'User',
-        photoURL: authUser?.photoURL || null,
-        favoriteTracks: [],
-    };
-    if (!db) return fallbackProfile;
 
+    // 1. First, read local cache for instant zero-latency retrieval
+    let localCached = null;
     try {
-        const docRef = doc(db, 'users', uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            return { ...fallbackProfile, ...docSnap.data() };
+        const raw = await AsyncStorage.getItem(`${LOCAL_USER_PREFIX}${uid}`);
+        if (raw) localCached = JSON.parse(raw);
+    } catch (e) {
+        // ignore storage read error
+    }
+
+    // 2. Fetch live profile data from Cloud Firestore with a short timeout
+    // so slow networks or offline states never hang the sign-in transition
+    let firestoreData = null;
+    if (db) {
+        try {
+            const getDocPromise = getDoc(doc(db, 'users', uid));
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Firestore timeout')), 2500)
+            );
+            const userSnap = await Promise.race([getDocPromise, timeoutPromise]);
+            if (userSnap && userSnap.exists && userSnap.exists()) {
+                firestoreData = userSnap.data();
+            }
+        } catch (fsErr) {
+            console.warn('Firestore getDoc notice (proceeding with cached/auth profile):', fsErr?.message || fsErr);
         }
-        return fallbackProfile;
-    } catch (err) {
-        console.warn('Failed to fetch user profile:', err);
-        return fallbackProfile;
     }
+
+    // 3. Fallback to Firebase Auth displayName
+    const firebaseDisplayName = authUser?.displayName || auth?.currentUser?.displayName || null;
+
+    // 4. Resolve username with priority: Firestore > local cache > Firebase Auth
+    const resolvedUsername =
+        (firestoreData?.username && firestoreData.username.trim().length > 0
+            ? firestoreData.username.trim()
+            : null) ||
+        (localCached?.username && localCached.username.trim().length > 0
+            ? localCached.username.trim()
+            : null) ||
+        (firebaseDisplayName && firebaseDisplayName.trim().length > 0
+            ? firebaseDisplayName.trim()
+            : null) ||
+        (firestoreData?.displayName && firestoreData.displayName.trim().length > 0
+            ? firestoreData.displayName.trim()
+            : null) ||
+        null;
+
+    const email =
+        authUser?.email ||
+        auth?.currentUser?.email ||
+        firestoreData?.email ||
+        localCached?.email ||
+        null;
+
+    const displayName =
+        resolvedUsername ||
+        firestoreData?.displayName ||
+        localCached?.displayName ||
+        firebaseDisplayName ||
+        (email ? email.split('@')[0] : 'User');
+
+    const photoURL =
+        authUser?.photoURL ||
+        auth?.currentUser?.photoURL ||
+        firestoreData?.photoURL ||
+        localCached?.photoURL ||
+        null;
+
+    const profile = {
+        uid,
+        email,
+        username: resolvedUsername,
+        displayName,
+        photoURL,
+        favoriteTracks: firestoreData?.favoriteTracks || localCached?.favoriteTracks || [],
+        ...(localCached || {}),
+        ...(firestoreData || {}),
+        // Enforce resolved username & display name
+        username: resolvedUsername,
+        displayName,
+    };
+
+    // Keep AsyncStorage updated
+    try {
+        await AsyncStorage.setItem(`${LOCAL_USER_PREFIX}${uid}`, JSON.stringify(profile));
+    } catch (e) {
+        // ignore cache write warning
+    }
+
+    // If Firestore was missing this user's username but we resolved one from cache/auth,
+    // automatically sync it back to Firestore so it is permanently preserved in Firebase
+    if (db && resolvedUsername && (!firestoreData || !firestoreData.username)) {
+        setDoc(
+            doc(db, 'users', uid),
+            {
+                uid,
+                username: resolvedUsername,
+                displayName: resolvedUsername,
+                email: email || '',
+                photoURL: photoURL || null,
+                updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+        ).catch((err) => {
+            console.warn('Auto-sync username to Firestore error:', err);
+        });
+    }
+
+    // Also sync Firebase Auth currentUser displayName if not set
+    if (auth?.currentUser && resolvedUsername && auth.currentUser.displayName !== resolvedUsername) {
+        updateProfile(auth.currentUser, { displayName: resolvedUsername }).catch(() => {});
+    }
+
+    return profile;
 };
 
-const saveUserProfile = async (uid, profile, options) => {
-    if (!db) return;
-    try {
-        await setDoc(doc(db, 'users', uid), profile, options);
-    } catch (error) {
-        console.warn('Failed to save the Firestore user profile:', error);
+/**
+ * Save user username and profile data to Firebase (Firestore + Auth) and AsyncStorage
+ */
+export const saveUserUsername = async (uid, username, additionalData = {}) => {
+    if (!uid) {
+        throw new Error('User ID is required to save username.');
     }
+    const trimmed = (username || '').trim();
+    if (!trimmed) {
+        throw new Error('Please enter a username.');
+    }
+
+    const email = auth?.currentUser?.email || additionalData.email || '';
+    const photoURL = auth?.currentUser?.photoURL || additionalData.photoURL || null;
+
+    // 1. Save directly to Cloud Firestore in Firebase (Permanent remote persistence)
+    if (db) {
+        try {
+            await setDoc(
+                doc(db, 'users', uid),
+                {
+                    uid,
+                    username: trimmed,
+                    displayName: trimmed,
+                    email,
+                    photoURL,
+                    updatedAt: serverTimestamp(),
+                    ...additionalData,
+                },
+                { merge: true }
+            );
+        } catch (fsErr) {
+            console.warn('Firestore setDoc error in saveUserUsername:', fsErr);
+        }
+    }
+
+    // 2. Save to Firebase Auth profile
+    if (auth?.currentUser) {
+        try {
+            await updateProfile(auth.currentUser, { displayName: trimmed });
+            if (auth.currentUser.reload) {
+                await auth.currentUser.reload().catch(() => {});
+            }
+        } catch (err) {
+            console.warn('Firebase Auth updateProfile warning:', err);
+        }
+    }
+
+    const profileData = {
+        uid,
+        username: trimmed,
+        displayName: trimmed,
+        email,
+        photoURL,
+        updatedAt: new Date().toISOString(),
+        favoriteTracks: [],
+        ...additionalData,
+    };
+
+    // 3. Save locally to AsyncStorage for fast instant retrieval
+    try {
+        await AsyncStorage.setItem(`${LOCAL_USER_PREFIX}${uid}`, JSON.stringify(profileData));
+    } catch (e) {
+        console.warn('AsyncStorage setItem warning:', e);
+    }
+
+    return profileData;
 };
+

@@ -31,9 +31,10 @@ const ProfileDrawer = ({
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const displayName =
+    userProfile?.username ||
     userProfile?.displayName ||
     user?.displayName ||
-    (user?.email ? user.email.split('@')[0] : 'Music fan');
+    (user?.email ? user.email.split('@')[0] : 'User');
   const photoURL = userProfile?.photoURL || user?.photoURL;
 
   useEffect(() => {

@@ -31,6 +31,8 @@ const PlaylistDetailModal = ({
   onToggleFavorite,
   isLiked,
   onDeletePlaylist,
+  userProfile,
+  onAttachProfile,
 }) => {
   const insets = useSafeAreaInsets();
 
@@ -43,17 +45,24 @@ const PlaylistDetailModal = ({
       Alert.alert('Empty Playlist', 'Add some songs first to start playing!');
       return;
     }
-    if (onPlayTrack) {
-      onPlayTrack(tracks[0]);
-    }
+    // Queue the full playlist in order, starting from the first track
+    audioPlayer.playPlaylist(tracks, 0);
   };
 
   const handleShuffle = () => {
     if (tracks.length === 0) return;
     const randomIndex = Math.floor(Math.random() * tracks.length);
-    if (onPlayTrack) {
-      onPlayTrack(tracks[randomIndex]);
-    }
+    // Use shuffle mode so upcoming tracks are shuffled
+    audioPlayer.setQueueForTrack(tracks[randomIndex], tracks, true);
+    audioPlayer.playTrack(tracks[randomIndex]);
+  };
+
+  const handleTrackPress = (track) => {
+    // Queue the playlist starting from this track, preserving order
+    audioPlayer.setQueueForTrack(track, tracks, false);
+    audioPlayer.playTrack(track);
+    // Notify parent so the player modal opens
+    if (onPlayTrack) onPlayTrack(track);
   };
 
   return (
@@ -129,6 +138,47 @@ const PlaylistDetailModal = ({
               {tracks.length} {tracks.length === 1 ? 'song' : 'songs'}
             </Text>
 
+            {/* Creator Profile Row */}
+            {(playlist.creator || userProfile) && (
+              <View style={styles.creatorRow}>
+                {(playlist.creator?.photoURL || userProfile?.photoURL) ? (
+                  <Image
+                    source={{ uri: playlist.creator?.photoURL || userProfile?.photoURL }}
+                    style={styles.creatorAvatar}
+                  />
+                ) : (
+                  <View style={[styles.creatorAvatar, styles.creatorAvatarPlaceholder]}>
+                    <Text style={styles.creatorAvatarInitial}>
+                      {(playlist.creator?.name || userProfile?.displayName || 'U')[0].toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+                <Text style={styles.creatorName}>
+                  {playlist.creator?.username
+                    ? `@${playlist.creator.username}`
+                    : playlist.creator?.name || userProfile?.displayName || 'You'}
+                </Text>
+              </View>
+            )}
+
+            {/* Attach My Profile Button */}
+            {userProfile && !playlist.isDefault && (
+              <TouchableOpacity
+                style={styles.attachProfileBtn}
+                activeOpacity={0.8}
+                onPress={() => {
+                  if (onAttachProfile) onAttachProfile(playlist.id);
+                }}
+              >
+                <Text style={styles.attachProfileIcon}>👤</Text>
+                <Text style={styles.attachProfileText}>
+                  {playlist.creator?.uid === userProfile?.uid
+                    ? 'Update My Profile'
+                    : 'Add My Profile to Playlist'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
             {/* Play & Shuffle Control Buttons */}
             <View style={styles.controlRow}>
               <TouchableOpacity
@@ -169,7 +219,7 @@ const PlaylistDetailModal = ({
                 key={`pl-track-${track.id}-${idx}`}
                 track={track}
                 isSelected={currentTrack?.id === track.id}
-                onPress={() => onPlayTrack && onPlayTrack(track)}
+                onPress={() => handleTrackPress(track)}
                 onOpenMenu={() =>
                   onOpenTrackMenu && onOpenTrackMenu(track, playlist.id)
                 }
@@ -349,6 +399,55 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  // Creator profile row styles
+  creatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: -8,
+    marginBottom: 12,
+  },
+  creatorAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    marginRight: 8,
+    backgroundColor: '#333',
+  },
+  creatorAvatarPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1DB954',
+  },
+  creatorAvatarInitial: {
+    color: '#000',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  creatorName: {
+    color: COLORS?.textSecondary || '#B3B3B3',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  attachProfileBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E2A22',
+    borderWidth: 1,
+    borderColor: '#1DB954',
+    borderRadius: 20,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    marginBottom: 14,
+  },
+  attachProfileIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  attachProfileText: {
+    color: '#1DB954',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
 

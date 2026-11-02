@@ -25,9 +25,10 @@ const durationInSeconds = (duration) => {
 const UserStatsModal = ({ visible, onClose, userProfile, user, recentTracks = [] }) => {
   const insets = useSafeAreaInsets();
   const displayName =
+    userProfile?.username ||
     userProfile?.displayName ||
     user?.displayName ||
-    (user?.email ? user.email.split('@')[0] : 'Music fan');
+    (user?.email ? user.email.split('@')[0] : 'User');
 
   const stats = useMemo(() => {
     const cutoff = Date.now() - FOUR_WEEKS_MS;

@@ -1,5 +1,5 @@
 // @refresh reset
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -25,6 +25,7 @@ import GeminiDJ from '../components/search/GeminiDJ';
 import { CreateView, LibraryView } from '../components/playlists/LibraryAndCreateViews';
 import PlaylistDetailModal from '../components/playlists/PlaylistDetailModal';
 import AddToPlaylistModal from '../components/playlists/AddToPlaylistModal';
+import SwipeableTrackRow from '../components/player/SwipeableTrackRow';
 import QueueModal from '../components/player/QueueModal';
 import TrackActionSheetModal from '../components/player/TrackActionSheetModal';
 import ProfileDrawer from '../components/profile/ProfileDrawer';
@@ -77,7 +78,7 @@ const HOME_FEATURED_SECTIONS = [
   },
   {
     id: 'made-for-you',
-    title: 'Made For Eahn',
+    title: 'Made For You',
     cards: [
       {
         id: 'daily-mix',
@@ -139,15 +140,28 @@ const HomeScreen = ({ navigation }) => {
   const [isListeningStatsOpen, setIsListeningStatsOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
-  const currentUser = authContextValue?.user || authContextValue?.userProfile || null;
+  const currentUser = authContextValue?.userProfile || authContextValue?.user || null;
   const selectedPlaylist =
     musicContext.playlists.find((playlist) => playlist.id === selectedPlaylistId) || null;
   const isLiked = musicContext.isLiked(currentTrack?.id);
   const userName =
+    authContextValue?.userProfile?.username ||
+    currentUser?.username ||
+    authContextValue?.userProfile?.displayName ||
     currentUser?.displayName ||
     currentUser?.name ||
     (currentUser?.email ? currentUser.email.split('@')[0] : null) ||
-    'EAHN';
+    'User';
+
+  const featuredSections = useMemo(
+    () =>
+      HOME_FEATURED_SECTIONS.map((section) =>
+        section.id === 'made-for-you'
+          ? { ...section, title: `Made For ${userName}` }
+          : section
+      ),
+    [userName]
+  );
 
   useEffect(() => {
     const query = searchQuery.trim();
@@ -459,7 +473,7 @@ const HomeScreen = ({ navigation }) => {
                 >
                   <Text style={styles.changeCategoryText}>‹ Categories</Text>
                 </TouchableOpacity>
-                {HOME_FEATURED_SECTIONS.map((section) => (
+                {featuredSections.map((section) => (
                   <View key={section.id} style={styles.homeFeaturedSection}>
                     <Text style={styles.homeSectionTitle}>{section.title}</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -556,6 +570,7 @@ const HomeScreen = ({ navigation }) => {
         ) : activeTab === TABS.LIBRARY ? (
           <LibraryView
             onOpenPlaylist={(playlist) => setSelectedPlaylistId(playlist.id)}
+            userProfile={currentUser}
           />
         ) : activeTab === TABS.CREATE ? (
           <CreateView
@@ -564,6 +579,7 @@ const HomeScreen = ({ navigation }) => {
               setSelectedPlaylistId(playlist.id);
             }}
             onSwitchToLibrary={() => setActiveTab(TABS.LIBRARY)}
+            userProfile={currentUser}
           />
         ) : (
           <ScrollView contentContainerStyle={styles.homeScrollContent} showsVerticalScrollIndicator={false}>
@@ -669,7 +685,7 @@ const HomeScreen = ({ navigation }) => {
               ))}
             </View>
 
-            {HOME_FEATURED_SECTIONS.map((section) => (
+            {featuredSections.map((section) => (
               <React.Fragment key={section.id}>
                 <View
                   style={[
@@ -706,53 +722,19 @@ const HomeScreen = ({ navigation }) => {
                     ]}
                   >
                     <Text style={styles.homeSectionTitle}>Recommended tracks</Text>
-                    {recommendedTracks.length > 0 ? recommendedTracks.map((track) => {
-                      const isSelected = currentTrack?.id === track.id;
-                      const artwork = getArtworkSource(track.artwork);
-
-                      return (
-                        <View
-                          key={track.id}
-                          style={[styles.trackRow, isSelected && styles.activeTrackRow]}
-                        >
-                          <TouchableOpacity
-                            style={styles.trackRowMain}
-                            onPress={() => handlePlayTrack(track)}
-                            activeOpacity={0.75}
-                          >
-                            {artwork ? (
-                              <Image source={artwork} style={styles.trackArtwork} />
-                            ) : (
-                              <View style={[styles.trackArtwork, styles.placeholderBox]}>
-                                <Text style={styles.placeholderSymbol}>♪</Text>
-                              </View>
-                            )}
-                            <View style={styles.trackMetaContainer}>
-                              <Text
-                                style={[styles.trackTitle, isSelected && styles.activeText]}
-                                numberOfLines={1}
-                              >
-                                {track.title}
-                              </Text>
-                              <Text style={styles.trackArtist} numberOfLines={1}>
-                                {track.artist}
-                              </Text>
-                            </View>
-                            <Text style={styles.recommendedPlayIcon}>
-                              {isSelected && isPlaying ? '❚❚' : '▶'}
-                            </Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={styles.songMoreButton}
-                            onPress={() => handleOpenTrackActions(track)}
-                            accessibilityLabel={`More options for ${track.title}`}
-                            hitSlop={8}
-                          >
-                            <Text style={styles.songMoreIcon}>•••</Text>
-                          </TouchableOpacity>
-                        </View>
-                      );
-                    }) : (
+                    {recommendedTracks.length > 0 ? recommendedTracks.map((track) => (
+                      <SwipeableTrackRow
+                        key={track.id}
+                        track={track}
+                        isSelected={currentTrack?.id === track.id}
+                        onPress={() => handlePlayTrack(track)}
+                        onOpenMenu={() => handleOpenTrackActions(track)}
+                        onAddToQueue={musicContext.addToQueue}
+                        onAddToPlaylist={handleOpenAddToPlaylist}
+                        onToggleFavorite={musicContext.toggleLikeTrack}
+                        isLiked={musicContext.isLiked(track.id)}
+                      />
+                    )) : (
                       <Text style={styles.noRecommendedTracks}>
                         No tracks found. Try another search.
                       </Text>
@@ -808,47 +790,25 @@ const HomeScreen = ({ navigation }) => {
                 {isMusicSearchLoading ? (
                   <Text style={styles.searchResultsHeading}>Searching music sources…</Text>
                 ) : null}
-                {searchResults.length ? searchResults.map((track) => {
-                  const artwork = getArtworkSource(track.artwork);
-                  return (
-                    <View key={track.id} style={styles.searchResultRow}>
-                      <TouchableOpacity
-                        style={styles.searchResultMain}
-                        activeOpacity={0.75}
-                        onPress={() => {
-                          handlePlayTrack(track);
-                          closeHomeSearch();
-                        }}
-                      >
-                        {artwork ? (
-                          <Image source={artwork} style={styles.searchResultArtwork} />
-                        ) : (
-                          <View style={[styles.searchResultArtwork, styles.placeholderBox]}>
-                            <Text style={styles.placeholderSymbol}>♪</Text>
-                          </View>
-                        )}
-                        <View style={styles.searchResultMeta}>
-                          <Text style={styles.searchResultTitle} numberOfLines={1}>
-                            {track.title}
-                          </Text>
-                          <Text style={styles.searchResultSubtitle} numberOfLines={1}>
-                            {track.artist} · {track.source === 'audius'
-                              ? 'Audius full track'
-                              : track.isPreview ? 'Preview' : 'Song'}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.songMoreButton}
-                        onPress={() => handleOpenTrackActions(track)}
-                        accessibilityLabel={`More options for ${track.title}`}
-                        hitSlop={8}
-                      >
-                        <Text style={styles.songMoreIcon}>•••</Text>
-                      </TouchableOpacity>
-                    </View>
-                  );
-                }) : isMusicSearchLoading ? null : (
+                {searchResults.length ? searchResults.map((track) => (
+                  <SwipeableTrackRow
+                    key={track.id}
+                    track={track}
+                    isSelected={currentTrack?.id === track.id}
+                    onPress={() => {
+                      handlePlayTrack(track);
+                      closeHomeSearch();
+                    }}
+                    onOpenMenu={() => handleOpenTrackActions(track)}
+                    onAddToQueue={musicContext.addToQueue}
+                    onAddToPlaylist={(t) => {
+                      handleOpenAddToPlaylist(t);
+                      closeHomeSearch();
+                    }}
+                    onToggleFavorite={musicContext.toggleLikeTrack}
+                    isLiked={musicContext.isLiked(track.id)}
+                  />
+                )) : isMusicSearchLoading ? null : (
                   <Text style={styles.noRecommendedTracks}>No results found. Try another search.</Text>
                 )}
               </ScrollView>
@@ -871,6 +831,10 @@ const HomeScreen = ({ navigation }) => {
         onToggleFavorite={musicContext.toggleLikeTrack}
         isLiked={musicContext.isLiked}
         onDeletePlaylist={musicContext.deletePlaylist}
+        userProfile={currentUser}
+        onAttachProfile={(playlistId) =>
+          musicContext.attachUserProfileToPlaylist(playlistId, currentUser)
+        }
       />
 
       <AddToPlaylistModal

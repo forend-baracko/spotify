@@ -17,7 +17,6 @@ import { useAuth } from '../context/AuthContext';
 
 const RegisterScreen = ({ navigation }) => {
     const { register, loginGoogle, isConfigured } = useAuth();
-    const [displayName, setDisplayName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -52,7 +51,7 @@ const RegisterScreen = ({ navigation }) => {
 
         setIsSubmitting(true);
         try {
-            await register(email, password, displayName);
+            await register(email, password);
         } catch (error) {
             setLocalError(error.message || 'Failed to create account.');
         } finally {
@@ -111,19 +110,6 @@ const RegisterScreen = ({ navigation }) => {
 
                     {/* Form Fields */}
                     <View style={styles.form}>
-                        <Text style={styles.label}>What should we call you?</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Enter your name"
-                            placeholderTextColor={COLORS.textMuted}
-                            value={displayName}
-                            onChangeText={(text) => {
-                                setDisplayName(text);
-                                if (localError) setLocalError('');
-                            }}
-                            autoCapitalize="words"
-                        />
-
                         <Text style={styles.label}>What's your email?</Text>
                         <TextInput
                             style={styles.input}

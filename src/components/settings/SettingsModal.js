@@ -25,9 +25,10 @@ const SettingsModal = ({
 }) => {
   const insets = useSafeAreaInsets();
   const displayName =
+    userProfile?.username ||
     userProfile?.displayName ||
     user?.displayName ||
-    (user?.email ? user.email.split('@')[0] : 'Music fan');
+    (user?.email ? user.email.split('@')[0] : 'User');
 
   const handlePrivateSessionChange = async (enabled) => {
     try {

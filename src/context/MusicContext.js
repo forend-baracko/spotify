@@ -264,6 +264,13 @@ export const MusicProvider = ({ children }) => {
         });
     }, [availableTracks]);
 
+    // Keep audioPlayer replenished with the latest available catalog for auto-replenishment
+    useEffect(() => {
+        if (typeof audioPlayer?.setCatalogProvider === 'function') {
+            audioPlayer.setCatalogProvider(() => availableTracks);
+        }
+    }, [availableTracks]);
+
     // Helper: Show floating toast
     const showToast = useCallback((message, icon = '✓') => {
         setToast({ message, icon, id: Date.now() });
@@ -288,18 +295,21 @@ export const MusicProvider = ({ children }) => {
         }
     };
 
-    // Create a new playlist
-    const createPlaylist = useCallback(async ({ title, description = '', icon = '🎶' }) => {
+    // Create a new playlist with optional creator profile
+    const createPlaylist = useCallback(async ({ title, description = '', icon = '🎶', creator = null, cover = null }) => {
         if (!title || !title.trim()) return null;
         const cleanTitle = title.trim();
+        const creatorName = creator?.displayName || creator?.username || 'You';
         const newPlaylist = {
             id: `pl-${Date.now()}`,
             title: cleanTitle,
-            description: description.trim() || 'Custom playlist created by you',
+            description: description.trim() || `Playlist created by ${creatorName}`,
             icon: icon || '🎶',
-            type: 'Playlist • You',
+            type: creator?.username ? `Playlist • @${creator.username}` : `Playlist • ${creatorName}`,
             isDefault: false,
             tracks: [],
+            creator: creator || null,
+            cover: cover || creator?.photoURL || null,
             createdAt: Date.now(),
         };
 
@@ -307,6 +317,45 @@ export const MusicProvider = ({ children }) => {
         await savePlaylists(updated);
         showToast(`Created playlist "${cleanTitle}"`, '🎉');
         return newPlaylist;
+    }, [playlists, showToast]);
+
+    // Update an existing playlist
+    const updatePlaylist = useCallback(async (playlistId, updates = {}) => {
+        let updatedTitle = '';
+        const updated = playlists.map((pl) => {
+            if (pl.id === playlistId) {
+                updatedTitle = pl.title;
+                return { ...pl, ...updates };
+            }
+            return pl;
+        });
+        await savePlaylists(updated);
+        showToast(`Updated "${updatedTitle}"`, '✓');
+    }, [playlists, showToast]);
+
+    // Attach user profile / avatar to a playlist
+    const attachUserProfileToPlaylist = useCallback(async (playlistId, userProfile) => {
+        if (!playlistId || !userProfile) return;
+        const creator = {
+            uid: userProfile.uid || null,
+            name: userProfile.displayName || userProfile.username || 'User',
+            username: userProfile.username || null,
+            photoURL: userProfile.photoURL || null,
+        };
+        const creatorLabel = userProfile.username ? `@${userProfile.username}` : userProfile.displayName || 'You';
+        const updated = playlists.map((pl) => {
+            if (pl.id === playlistId) {
+                return {
+                    ...pl,
+                    creator,
+                    cover: userProfile.photoURL || pl.cover,
+                    type: `Playlist • ${creatorLabel}`,
+                };
+            }
+            return pl;
+        });
+        await savePlaylists(updated);
+        showToast(`Added profile to playlist!`, '👤');
     }, [playlists, showToast]);
 
     // Delete a playlist
@@ -404,13 +453,20 @@ export const MusicProvider = ({ children }) => {
         return likedTrackIds.includes(trackId);
     }, [likedTrackIds]);
 
-    // Add to user queue
+    // Add to user queue - inserted right after current song to play NEXT
     const addToQueue = useCallback((track) => {
         if (!track) return;
         setUserQueue(prev => [...prev, track]);
-        const playbackQueue = audioPlayer.getQueue();
-        const currentIndex = audioPlayer.getCurrentIndex();
-        audioPlayer.setQueue([...playbackQueue, track], currentIndex);
+        if (typeof audioPlayer.addToQueueNext === 'function') {
+            audioPlayer.addToQueueNext(track);
+        } else {
+            const playbackQueue = audioPlayer.getQueue();
+            const currentIndex = audioPlayer.getCurrentIndex();
+            const insertIdx = currentIndex + 1;
+            const updated = [...playbackQueue];
+            updated.splice(insertIdx, 0, track);
+            audioPlayer.setQueue(updated, currentIndex);
+        }
         showToast(`Added to queue: "${track.title}"`, '⤹');
     }, [showToast]);
 
@@ -484,6 +540,8 @@ export const MusicProvider = ({ children }) => {
         playlists,
         availableTracks,
         createPlaylist,
+        updatePlaylist,
+        attachUserProfileToPlaylist,
         deletePlaylist,
         addTrackToPlaylist,
         removeTrackFromPlaylist,

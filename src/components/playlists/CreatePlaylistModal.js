@@ -17,6 +17,7 @@ const CreatePlaylistModal = ({
     visible,
     onClose,
     onCreate,
+    userProfile,
 }) => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
@@ -24,10 +25,20 @@ const CreatePlaylistModal = ({
 
     const handleCreate = () => {
         if (!title.trim()) return;
+        const creator = userProfile
+            ? {
+                  uid: userProfile.uid || null,
+                  name: userProfile.displayName || userProfile.username || 'You',
+                  username: userProfile.username || null,
+                  photoURL: userProfile.photoURL || null,
+              }
+            : null;
         onCreate({
             title: title.trim(),
             description: description.trim(),
             icon: selectedEmoji,
+            creator,
+            cover: userProfile?.photoURL || null,
         });
         setTitle('');
         setDescription('');
