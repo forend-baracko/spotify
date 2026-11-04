@@ -1,6 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import {
+    collection,
+    deleteDoc,
+    doc,
+    getDoc,
+    getDocs,
+    setDoc,
+    serverTimestamp,
+} from 'firebase/firestore';
 import { MOCK_TRACKS } from '../services/audiomackService';
 import audioPlayer from '../services/audioPlayer';
 import { fetchAudiusTracks } from '../services/audiusService';
@@ -207,14 +215,27 @@ export const MusicProvider = ({ children }) => {
                     } catch (e) {}
                 }
 
+                let firestoreLikedTracks = [];
                 if (db && uid) {
                     try {
                         const userSnap = await getDoc(doc(db, 'users', uid));
                         if (userSnap && userSnap.exists && userSnap.exists()) {
                             const data = userSnap.data();
-                            if (Array.isArray(data?.favoriteTracks) && data.favoriteTracks.length > 0) {
+                            if (Array.isArray(data?.favoriteTracks)) {
                                 resolvedLikedIds = Array.from(new Set([...resolvedLikedIds, ...data.favoriteTracks]));
                             }
+                        }
+                        const likedSongsSnap = await getDocs(collection(db, 'users', uid, 'likedSongs'));
+                        firestoreLikedTracks = likedSongsSnap.docs.map((likedSongDoc) => ({
+                            ...likedSongDoc.data(),
+                            id: likedSongDoc.data().trackId || likedSongDoc.id,
+                        }));
+                        if (firestoreLikedTracks.length > 0) {
+                            firestoreLikedTracks.forEach((track) => {
+                                if (!resolvedLikedIds.includes(track.id)) {
+                                    resolvedLikedIds.push(track.id);
+                                }
+                            });
                         }
                     } catch (fsErr) {
                         console.warn('Firestore user likes retrieval note:', fsErr?.message || fsErr);
@@ -225,6 +246,11 @@ export const MusicProvider = ({ children }) => {
                 setLikedTrackIds(resolvedLikedIds);
 
                 const currentTracksById = new Map(availableTracks.map((track) => [track.id, track]));
+                firestoreLikedTracks.forEach((track) => {
+                    if (!currentTracksById.has(track.id)) {
+                        currentTracksById.set(track.id, track);
+                    }
+                });
                 const defaultPlaylists = buildInitialPlaylists(
                     availableTracks,
                     resolvedLikedIds.map((id) => currentTracksById.get(id)).filter(Boolean)
@@ -333,7 +359,14 @@ export const MusicProvider = ({ children }) => {
     };
 
     // Create a new playlist with creator profile
-    const createPlaylist = useCallback(async ({ title, description = '', icon = '🎶', creator = null, cover = null }) => {
+    const createPlaylist = useCallback(async ({
+        title,
+        description = '',
+        icon = '🎶',
+        creator = null,
+        cover = null,
+        initialTrack = null,
+    }) => {
         if (!title || !title.trim()) return null;
         const cleanTitle = title.trim();
         const creatorName = creator?.displayName || creator?.username || 'You';
@@ -344,7 +377,7 @@ export const MusicProvider = ({ children }) => {
             icon: icon || '🎶',
             type: creator?.username ? `Playlist • @${creator.username}` : `Playlist • ${creatorName}`,
             isDefault: false,
-            tracks: [],
+            tracks: initialTrack ? [initialTrack] : [],
             creator: creator || null,
             cover: cover || creator?.photoURL || null,
             createdAt: Date.now(),
@@ -463,6 +496,47 @@ export const MusicProvider = ({ children }) => {
 
         setLikedTrackIds(newLiked);
 
+        const firestoreSync = (async () => {
+            if (!db || !uid) return;
+            try {
+                const userRef = doc(db, 'users', uid);
+                const likedSongRef = doc(
+                    db,
+                    'users',
+                    uid,
+                    'likedSongs',
+                    encodeURIComponent(String(track.id))
+                );
+                const likedSongData = {
+                    trackId: track.id,
+                    title: track.title || '',
+                    artist: track.artist || '',
+                    album: track.album || '',
+                    artwork: typeof track.artwork === 'string' ? track.artwork : '',
+                    duration: track.duration ?? null,
+                    genre: track.genre || '',
+                    source: track.source || '',
+                    sourceUrl: track.source_url || track.sourceUrl || '',
+                    likedAt: serverTimestamp(),
+                };
+                const writes = [
+                    setDoc(
+                        userRef,
+                        {
+                            favoriteTracks: newLiked,
+                            updatedAt: serverTimestamp(),
+                        },
+                        { merge: true }
+                    ),
+                    isLikedNow ? deleteDoc(likedSongRef) : setDoc(likedSongRef, likedSongData),
+                ];
+                await Promise.all(writes);
+            } catch (err) {
+                console.warn('Firestore likedSongs sync warning:', err);
+                showToast('Liked Songs sync failed. Check your connection.', '⚠️');
+            }
+        })();
+
         // Update Liked Songs playlist for this user
         const updatedPlaylists = playlists.map((pl) => {
             if (pl.id === 'pl-liked') {
@@ -482,19 +556,7 @@ export const MusicProvider = ({ children }) => {
             console.warn('Error saving user liked tracks:', e);
         }
 
-        // Sync with Firestore profile if logged in
-        if (db && uid) {
-            setDoc(
-                doc(db, 'users', uid),
-                {
-                    favoriteTracks: newLiked,
-                    updatedAt: serverTimestamp(),
-                },
-                { merge: true }
-            ).catch((err) => {
-                console.warn('Firestore favoriteTracks sync warning:', err);
-            });
-        }
+        await firestoreSync;
     }, [likedTrackIds, playlists, showToast]);
 
     const isLiked = useCallback((trackId) => {

@@ -165,7 +165,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const saveUsername = async (username) => {
+  const saveUsername = async (username, { requireFirestore = false } = {}) => {
     setAuthError(null);
     if (!user) {
       throw new Error('You must be signed in to set a username.');
@@ -175,20 +175,11 @@ export const AuthProvider = ({ children }) => {
       throw new Error('Please enter a username.');
     }
 
-    // Immediately update local state so the user is never stuck on a loading screen
-    setUserProfile((prev) => ({
-      ...(prev || {}),
-      uid: user.uid,
-      email: user.email,
-      username: trimmed,
-      displayName: trimmed,
-    }));
-
     try {
       const savedData = await saveUserUsername(user.uid, trimmed, {
         email: user.email || '',
         photoURL: user.photoURL || null,
-      });
+      }, { requireFirestore });
 
       setUserProfile((prev) => ({
         ...(prev || {}),
@@ -201,8 +192,8 @@ export const AuthProvider = ({ children }) => {
 
       return savedData;
     } catch (error) {
-      console.warn('Background saveUserUsername error:', error);
-      return { username: trimmed, displayName: trimmed };
+      setAuthError(error.message);
+      throw error;
     }
   };
 

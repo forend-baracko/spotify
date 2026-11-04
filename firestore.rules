@@ -4,6 +4,10 @@ service cloud.firestore {
     // User profile documents: only authenticated users can read, create, and update their own document
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /likedSongs/{songId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
     }
 
     // Default deny for everything else to enforce maximum security

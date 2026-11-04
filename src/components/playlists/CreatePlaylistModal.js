@@ -22,28 +22,40 @@ const CreatePlaylistModal = ({
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [selectedEmoji, setSelectedEmoji] = useState('🎶');
+    const [error, setError] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleCreate = () => {
+    const handleCreate = async () => {
         if (!title.trim()) return;
         const creator = userProfile
             ? {
                   uid: userProfile.uid || null,
                   name: userProfile.displayName || userProfile.username || 'You',
-                  username: userProfile.username || null,
+                displayName: userProfile.displayName || userProfile.username || 'You',
+                username: userProfile.username || null,
                   photoURL: userProfile.photoURL || null,
               }
             : null;
-        onCreate({
-            title: title.trim(),
-            description: description.trim(),
-            icon: selectedEmoji,
-            creator,
-            cover: userProfile?.photoURL || null,
-        });
-        setTitle('');
-        setDescription('');
-        setSelectedEmoji('🎶');
-        onClose();
+        setError('');
+        setIsSubmitting(true);
+        try {
+            await onCreate({
+                title: title.trim(),
+                description: description.trim(),
+                icon: selectedEmoji,
+                creator,
+                cover: userProfile?.photoURL || null,
+            });
+            setTitle('');
+            setDescription('');
+            setSelectedEmoji('🎶');
+            onClose();
+        } catch (createError) {
+            console.warn('Could not create playlist:', createError);
+            setError('Could not create playlist. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -97,6 +109,7 @@ const CreatePlaylistModal = ({
                         onChangeText={setDescription}
                         maxLength={100}
                     />
+                    {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
                     {/* Action buttons */}
                     <View style={styles.buttonRow}>
@@ -111,10 +124,10 @@ const CreatePlaylistModal = ({
                         <TouchableOpacity
                             style={[
                                 styles.createBtn,
-                                !title.trim() && styles.createBtnDisabled,
+                            (!title.trim() || isSubmitting) && styles.createBtnDisabled,
                             ]}
                             onPress={handleCreate}
-                            disabled={!title.trim()}
+                            disabled={!title.trim() || isSubmitting}
                             activeOpacity={0.8}
                         >
                             <Text style={styles.createText}>Create</Text>
@@ -219,6 +232,11 @@ const styles = StyleSheet.create({
         color: COLORS.black,
         fontSize: 15,
         fontWeight: 'bold',
+    },
+    errorText: {
+        color: '#FF8A8A',
+        fontSize: 13,
+        marginBottom: SPACE.sm,
     },
 });
 

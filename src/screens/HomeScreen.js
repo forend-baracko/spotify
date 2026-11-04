@@ -305,8 +305,8 @@ const HomeScreen = ({ navigation }) => {
     setActionTrackPlaylistId(null);
   };
 
-  const handleAddTrackToPlaylist = (playlistId, track) => {
-    musicContext.addTrackToPlaylist(playlistId, track);
+  const handleAddTrackToPlaylist = async (playlistId, track) => {
+    await musicContext.addTrackToPlaylist(playlistId, track);
     setIsAddToPlaylistOpen(false);
   };
 
@@ -616,7 +616,6 @@ const HomeScreen = ({ navigation }) => {
         ) : activeTab === TABS.LIBRARY ? (
           <LibraryView
             onOpenPlaylist={(playlist) => setSelectedPlaylistId(playlist.id)}
-            userProfile={currentUser}
           />
         ) : activeTab === TABS.CREATE ? (
           <CreateView
@@ -907,6 +906,7 @@ const HomeScreen = ({ navigation }) => {
         onClose={() => setIsAddToPlaylistOpen(false)}
         onSelectPlaylist={handleAddTrackToPlaylist}
         onCreatePlaylist={musicContext.createPlaylist}
+        userProfile={authContextValue?.userProfile}
       />
 
       {/* Full-Screen Player Modal */}
@@ -1144,6 +1144,7 @@ const HomeScreen = ({ navigation }) => {
         onClose={() => setIsProfileDetailsOpen(false)}
         user={authContextValue?.user}
         userProfile={authContextValue?.userProfile}
+        onSaveUsername={authContextValue?.saveUsername}
       />
 
       <UserStatsModal

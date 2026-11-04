@@ -347,7 +347,12 @@ export const getUserProfile = async (uid, authUser) => {
 /**
  * Save user username and profile data to Firebase (Firestore + Auth) and AsyncStorage
  */
-export const saveUserUsername = async (uid, username, additionalData = {}) => {
+export const saveUserUsername = async (
+    uid,
+    username,
+    additionalData = {},
+    { requireFirestore = false } = {}
+) => {
     if (!uid) {
         throw new Error('User ID is required to save username.');
     }
@@ -360,6 +365,9 @@ export const saveUserUsername = async (uid, username, additionalData = {}) => {
     const photoURL = auth?.currentUser?.photoURL || additionalData.photoURL || null;
 
     // 1. Save directly to Cloud Firestore in Firebase (Permanent remote persistence)
+    if (!db && requireFirestore) {
+        throw new Error('Firestore is unavailable. Please try again when connected.');
+    }
     if (db) {
         try {
             await setDoc(
@@ -377,6 +385,9 @@ export const saveUserUsername = async (uid, username, additionalData = {}) => {
             );
         } catch (fsErr) {
             console.warn('Firestore setDoc error in saveUserUsername:', fsErr);
+            if (requireFirestore) {
+                throw new Error('Could not save your username to your account. Please try again.');
+            }
         }
     }
 
@@ -412,4 +423,3 @@ export const saveUserUsername = async (uid, username, additionalData = {}) => {
 
     return profileData;
 };
-

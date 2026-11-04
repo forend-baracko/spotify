@@ -24,6 +24,7 @@ const AddToPlaylistModal = ({
     onClose,
     onSelectPlaylist,
     onCreatePlaylist,
+    userProfile,
 }) => {
     const insets = useSafeAreaInsets();
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -31,21 +32,27 @@ const AddToPlaylistModal = ({
     if (!track) return null;
 
     const handleCreateAndAdd = async (playlistData) => {
-        if (onCreatePlaylist) {
-            const newPlaylist = await onCreatePlaylist(playlistData);
-            if (newPlaylist && onSelectPlaylist) {
-                onSelectPlaylist(newPlaylist.id, track);
-            }
+        if (!onCreatePlaylist) {
+            throw new Error('Playlist creation is unavailable.');
         }
+        const newPlaylist = await onCreatePlaylist({
+            ...playlistData,
+            initialTrack: track,
+        });
+        if (!newPlaylist) {
+            throw new Error('Playlist creation did not return a playlist.');
+        }
+        onClose();
     };
 
     return (
-        <Modal
-            transparent
-            visible={visible}
-            animationType="slide"
-            onRequestClose={onClose}
-        >
+        <>
+            <Modal
+                transparent
+                visible={visible && !isCreateModalOpen}
+                animationType="slide"
+                onRequestClose={onClose}
+            >
             <View style={styles.overlay}>
                 <TouchableWithoutFeedback onPress={onClose}>
                     <View style={styles.backdrop} />
@@ -141,13 +148,14 @@ const AddToPlaylistModal = ({
                 </View>
             </View>
 
-            {/* Nested Create Playlist Dialog */}
+            </Modal>
             <CreatePlaylistModal
-                visible={isCreateModalOpen}
+                visible={visible && isCreateModalOpen}
                 onClose={() => setIsCreateModalOpen(false)}
                 onCreate={handleCreateAndAdd}
+                userProfile={userProfile}
             />
-        </Modal>
+        </>
     );
 };
 

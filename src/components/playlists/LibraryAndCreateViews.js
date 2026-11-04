@@ -10,60 +10,14 @@ import { COLORS, SPACE, RADIUS } from '../../constants/theme';
 import { useMusic } from '../../context/MusicContext';
 import CreatePlaylistModal from './CreatePlaylistModal';
 
-export const LibraryView = ({
-    onOpenPlaylist,
-    userProfile,
-}) => {
-    const { playlists, createPlaylist } = useMusic();
-    const [selectedChip, setSelectedChip] = useState('Playlists');
-    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-
-    const chips = ['Playlists', 'Podcasts', 'Artists', 'Downloaded'];
-
-    const handleCreatePlaylist = async (playlistData) => {
-        const newPl = await createPlaylist(playlistData);
-        if (newPl && onOpenPlaylist) {
-            onOpenPlaylist(newPl);
-        }
-    };
+export const LibraryView = ({ onOpenPlaylist }) => {
+    const { playlists } = useMusic();
 
     return (
         <View style={styles.container}>
             <ScrollView style={styles.tabContent} contentContainerStyle={styles.scrollPad}>
                 {/* Header */}
-                <View style={styles.headerRow}>
-                    <Text style={styles.tabHeading}>Your Library</Text>
-                    <TouchableOpacity
-                        style={styles.actionBtn}
-                        activeOpacity={0.8}
-                        onPress={() => setIsCreateModalOpen(true)}
-                    >
-                        <Text style={styles.actionBtnText}>+ Add</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {/* Filter Chips */}
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.chipsScroll}
-                    contentContainerStyle={styles.chipsRow}
-                >
-                    {chips.map((chip) => {
-                        const isActive = selectedChip === chip;
-                        return (
-                            <TouchableOpacity
-                                key={chip}
-                                style={[styles.chip, isActive && styles.activeChip]}
-                                onPress={() => setSelectedChip(chip)}
-                            >
-                                <Text style={[styles.chipText, isActive && styles.activeChipText]}>
-                                    {chip}
-                                </Text>
-                            </TouchableOpacity>
-                        );
-                    })}
-                </ScrollView>
+                <Text style={[styles.tabHeading, styles.libraryHeading]}>Your Library</Text>
 
                 {/* Playlist list */}
                 {playlists.map((pl) => {
@@ -94,14 +48,6 @@ export const LibraryView = ({
                 })}
 
             </ScrollView>
-
-            {/* Create Playlist Modal */}
-            <CreatePlaylistModal
-                visible={isCreateModalOpen}
-                onClose={() => setIsCreateModalOpen(false)}
-                onCreate={handleCreatePlaylist}
-                userProfile={userProfile}
-            />
         </View>
     );
 };
@@ -178,59 +124,18 @@ const styles = StyleSheet.create({
         paddingTop: SPACE.sm,
         paddingBottom: 110,
     },
-    headerRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: SPACE.md,
-    },
     tabHeading: {
         color: COLORS.textPrimary,
         fontSize: 24,
         fontWeight: 'bold',
     },
+    libraryHeading: {
+        marginBottom: SPACE.md,
+    },
     tabSubheading: {
         color: COLORS.textSecondary,
         fontSize: 14,
         marginBottom: SPACE.lg,
-    },
-    actionBtn: {
-        backgroundColor: COLORS.surfaceElevated,
-        paddingHorizontal: SPACE.md,
-        paddingVertical: 6,
-        borderRadius: RADIUS.circle,
-        borderWidth: 1,
-        borderColor: COLORS.border,
-    },
-    actionBtnText: {
-        color: COLORS.white,
-        fontSize: 13,
-        fontWeight: '600',
-    },
-    chipsScroll: {
-        marginBottom: SPACE.md,
-    },
-    chipsRow: {
-        flexDirection: 'row',
-        paddingRight: SPACE.md,
-    },
-    chip: {
-        backgroundColor: COLORS.surfaceElevated,
-        paddingHorizontal: 14,
-        paddingVertical: 7,
-        borderRadius: RADIUS.circle,
-        marginRight: 8,
-    },
-    activeChip: {
-        backgroundColor: COLORS.white,
-    },
-    chipText: {
-        color: COLORS.textPrimary,
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    activeChipText: {
-        color: COLORS.black,
     },
     playlistRow: {
         flexDirection: 'row',
