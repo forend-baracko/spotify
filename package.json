@@ -8,11 +8,7 @@
     "lint": "eslint .",
     "server": "node server/index.js",
     "start": "react-native start",
-    "test": "jest",
-    "admin": "npm --prefix admin run dev",
-    "admin:build": "npm --prefix admin run build",
-    "functions:lint": "npm --prefix functions run lint",
-    "deploy:admin": "npm run admin:build && firebase deploy --only hosting,functions,firestore:rules,storage"
+    "test": "jest"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^3.1.1",

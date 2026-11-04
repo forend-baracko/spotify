@@ -25,8 +25,7 @@
     "node_modules",
     "babel.config.js",
     "metro.config.js",
-    "jest.config.js",
-    "admin"
+    "jest.config.js"
   ],
   "extends": "@react-native/typescript-config/tsconfig.json"
 }
