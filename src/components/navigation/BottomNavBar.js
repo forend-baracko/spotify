@@ -29,6 +29,12 @@ const BottomNavBar = ({ activeTab, onSelectTab, onOpenPlayer, isCreateModalOpen 
     if (typeof audioPlayer?.addListener !== 'function') return;
 
     const unsubscribe = audioPlayer.addListener((event, data) => {
+      if (event === 'reset' || data?.track === null) {
+        setCurrentTrack(null);
+        setIsPlaying(false);
+        setCurrentTime(0);
+        return;
+      }
       if (data?.track) setCurrentTrack(data.track);
       if (data?.isPlaying !== undefined) setIsPlaying(!!data.isPlaying);
       if (data?.currentTime !== undefined) setCurrentTime(data.currentTime);

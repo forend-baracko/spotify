@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, isFirebaseConfigured } from '../services/firebaseConfig';
+import audioPlayer from '../services/audioPlayer';
 import {
   registerWithEmail,
   loginWithEmail,
@@ -22,6 +23,7 @@ export const AuthProvider = ({ children }) => {
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(true); // Default to true so returning users don't see onboarding
   const [authError, setAuthError] = useState(null);
   const profileLoadId = useRef(0);
+  const previousUserUidRef = useRef(null);
 
   const completeOnboarding = async () => {
     try {
@@ -96,8 +98,20 @@ export const AuthProvider = ({ children }) => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       try {
         if (currentUser) {
+          if (previousUserUidRef.current && previousUserUidRef.current !== currentUser.uid) {
+            if (typeof audioPlayer?.reset === 'function') {
+              audioPlayer.reset();
+            }
+          }
+          previousUserUidRef.current = currentUser.uid;
           await syncAuthenticatedUser(currentUser);
         } else {
+          if (previousUserUidRef.current) {
+            if (typeof audioPlayer?.reset === 'function') {
+              audioPlayer.reset();
+            }
+          }
+          previousUserUidRef.current = null;
           setUser(null);
           setUserProfile(null);
           setIsProfileLoading(false);
@@ -195,6 +209,10 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     setAuthError(null);
     try {
+      if (typeof audioPlayer?.reset === 'function') {
+        audioPlayer.reset();
+      }
+      previousUserUidRef.current = null;
       await logoutUser();
       setUser(null);
       setUserProfile(null);

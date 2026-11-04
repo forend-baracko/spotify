@@ -59,6 +59,15 @@ export default function FullScreenPlayerModal({
     if (typeof audioPlayer?.addListener !== 'function') return;
 
     const unsubscribe = audioPlayer.addListener((event, data) => {
+      if (event === 'reset' || data?.track === null) {
+        setTrack(null);
+        setIsPlaying(false);
+        setCurrentTime(0);
+        setIsShuffle(false);
+        setRepeatMode(REPEAT_MODE.OFF);
+        return;
+      }
+
       if (event === 'mode') {
         if (data?.isShuffle !== undefined) setIsShuffle(data.isShuffle);
         if (data?.repeatMode !== undefined) setRepeatMode(data.repeatMode);

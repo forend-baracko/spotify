@@ -17,7 +17,10 @@ export default function MiniPlayer({ onPress }) {
     if (typeof audioPlayer?.addListener !== 'function') return;
 
     const unsubscribe = audioPlayer.addListener((event, data) => {
-      if (event === 'status') {
+      if (event === 'reset') {
+        setCurrentTrack(null);
+        setIsPlaying(false);
+      } else if (event === 'status') {
         setCurrentTrack(data?.track || null);
         setIsPlaying(!!data?.isPlaying);
       }

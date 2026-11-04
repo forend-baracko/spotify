@@ -68,8 +68,9 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
       if (!selectedTrack) {
         throw new Error('Gemini could not match a track to the available catalog.');
       }
-      const queue = shuffleTracks(tracks.filter((track) => track.id !== selectedTrack.id));
-      setSetTracks([selectedTrack, ...queue]);
+      // Keep initial queue lean to prevent mobile system lag; player auto-replenishes on demand
+      const initialQueue = shuffleTracks(tracks.filter((track) => track.id !== selectedTrack.id)).slice(0, 6);
+      setSetTracks([selectedTrack, ...initialQueue]);
       setDjSet(result);
     } catch (requestError) {
       setError(requestError.message || 'Could not create a DJ set. Please try again.');

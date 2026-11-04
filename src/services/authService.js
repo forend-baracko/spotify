@@ -301,8 +301,6 @@ export const getUserProfile = async (uid, authUser) => {
     const profile = {
         uid,
         email,
-        username: resolvedUsername,
-        displayName,
         photoURL,
         favoriteTracks: firestoreData?.favoriteTracks || localCached?.favoriteTracks || [],
         ...(localCached || {}),

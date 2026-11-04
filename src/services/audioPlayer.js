@@ -436,6 +436,30 @@ class AudioPlayerService {
     this.emit('status');
   }
 
+  reset() {
+    this.hardStopPreviousSound();
+    this.currentTrack = null;
+    this.isPlaying = false;
+    this.queue = [];
+    this.currentIndex = 0;
+    this.currentTime = 0;
+    this.duration = 230;
+    this.isShuffle = false;
+    this.repeatMode = REPEAT_MODE.OFF;
+    this.userQueueCount = 0;
+    this.emit('reset', {
+      track: null,
+      isPlaying: false,
+      queue: [],
+      currentIndex: 0,
+      currentTime: 0,
+    });
+    this.emit('status', { track: null, isPlaying: false });
+    this.emit('queue', { queue: [] });
+    this.emit('mode', { isShuffle: false, repeatMode: REPEAT_MODE.OFF });
+    this.emit('progress', { currentTime: 0, duration: 230 });
+  }
+
   async playPrevious() {
     if (!this.queue || this.queue.length === 0) return;
 

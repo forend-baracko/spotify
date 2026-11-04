@@ -1,21 +1,21 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { MOCK_TRACKS } from '../services/audiomackService';
 import audioPlayer from '../services/audioPlayer';
 import { fetchAudiusTracks } from '../services/audiusService';
+import { useAuth } from './AuthContext';
+import { db } from '../services/firebaseConfig';
 
 const MusicContext = createContext(null);
 
-const STORAGE_KEYS = {
-    PLAYLISTS: '@spotify_user_playlists_v2',
-    LIKED_TRACKS: '@spotify_liked_tracks_v2',
-    RECENTS: '@spotify_recents_v2',
-    USER_QUEUE: '@spotify_user_queue_v2',
-    PRIVATE_SESSION: '@spotify_private_session_v1',
+const getUserStorageKey = (uid, key) => {
+    const scope = uid ? `u_${uid}` : 'guest';
+    return `@spotibai_${scope}_${key}_v3`;
 };
 
 // Initial default curated playlists
-const DEFAULT_PLAYLISTS = [
+const buildInitialPlaylists = (catalog = MOCK_TRACKS, likedTracks = []) => [
     {
         id: 'pl-liked',
         title: 'Liked Songs',
@@ -23,7 +23,7 @@ const DEFAULT_PLAYLISTS = [
         icon: '💚',
         type: 'Playlist • Auto',
         isDefault: true,
-        tracks: [],
+        tracks: likedTracks,
     },
     {
         id: 'pl-all-songs',
@@ -32,7 +32,7 @@ const DEFAULT_PLAYLISTS = [
         icon: '🎵',
         type: 'Playlist • Your Library',
         isDefault: true,
-        tracks: MOCK_TRACKS,
+        tracks: catalog,
     },
     {
         id: 'pl-top-hits',
@@ -41,7 +41,7 @@ const DEFAULT_PLAYLISTS = [
         icon: '🔥',
         type: 'Playlist • Spotify',
         isDefault: false,
-        tracks: [MOCK_TRACKS[1], MOCK_TRACKS[3], MOCK_TRACKS[4]],
+        tracks: [catalog[1] || MOCK_TRACKS[1], catalog[3] || MOCK_TRACKS[3], catalog[4] || MOCK_TRACKS[4]].filter(Boolean),
     },
     {
         id: 'pl-chill',
@@ -50,7 +50,7 @@ const DEFAULT_PLAYLISTS = [
         icon: '🌙',
         type: 'Playlist • You',
         isDefault: false,
-        tracks: [MOCK_TRACKS[0], MOCK_TRACKS[3]],
+        tracks: [catalog[0] || MOCK_TRACKS[0], catalog[3] || MOCK_TRACKS[3]].filter(Boolean),
     },
     {
         id: 'pl-workout',
@@ -59,7 +59,7 @@ const DEFAULT_PLAYLISTS = [
         icon: '⚡',
         type: 'Playlist • You',
         isDefault: false,
-        tracks: [MOCK_TRACKS[2], MOCK_TRACKS[5], MOCK_TRACKS[6] || MOCK_TRACKS[0]],
+        tracks: [catalog[2] || MOCK_TRACKS[2], catalog[5] || MOCK_TRACKS[5], catalog[6] || MOCK_TRACKS[0]].filter(Boolean),
     },
     {
         id: 'pl-daily-1',
@@ -68,12 +68,16 @@ const DEFAULT_PLAYLISTS = [
         icon: '🎧',
         type: 'Made for You',
         isDefault: false,
-        tracks: [MOCK_TRACKS[1], MOCK_TRACKS[2]],
+        tracks: [catalog[1] || MOCK_TRACKS[1], catalog[2] || MOCK_TRACKS[2]].filter(Boolean),
     },
 ];
 
 export const MusicProvider = ({ children }) => {
-    const [playlists, setPlaylists] = useState(DEFAULT_PLAYLISTS);
+    const { user } = useAuth();
+    const currentUserId = user?.uid || null;
+    const activeUserIdRef = useRef(currentUserId);
+
+    const [playlists, setPlaylists] = useState(() => buildInitialPlaylists(MOCK_TRACKS, []));
     const [availableTracks, setAvailableTracks] = useState(MOCK_TRACKS);
     const [likedTrackIds, setLikedTrackIds] = useState([]);
     const [userQueue, setUserQueue] = useState([]);
@@ -82,142 +86,31 @@ export const MusicProvider = ({ children }) => {
     const [isPrivateSessionLoaded, setIsPrivateSessionLoaded] = useState(false);
     const [toast, setToast] = useState(null); // { message, icon, id }
 
-    // Load persisted state on mount
-    useEffect(() => {
-        const loadPersistedData = async () => {
-            try {
-                const storedPlaylists = await AsyncStorage.getItem(STORAGE_KEYS.PLAYLISTS);
-                const storedRecents = await AsyncStorage.getItem(STORAGE_KEYS.RECENTS);
-                const storedPrivateSession = await AsyncStorage.getItem(STORAGE_KEYS.PRIVATE_SESSION);
-                if (storedPrivateSession !== null) {
-                    setPrivateSessionState(JSON.parse(storedPrivateSession) === true);
-                }
-                setIsPrivateSessionLoaded(true);
-                const parsedStoredPlaylists = storedPlaylists
-                    ? JSON.parse(storedPlaylists)
-                    : [];
-                const parsedStoredRecents = storedRecents
-                    ? JSON.parse(storedRecents)
-                    : [];
-                const cachedRemoteTracks = [
-                    ...(Array.isArray(parsedStoredPlaylists)
-                        ? parsedStoredPlaylists.flatMap((playlist) => playlist.tracks || [])
-                        : []),
-                    ...(Array.isArray(parsedStoredRecents) ? parsedStoredRecents : []),
-                ].filter(
-                        (track) =>
-                            ['jamendo', 'archive', 'deezer'].includes(track.source) &&
-                            typeof track.stream_url === 'string'
-                    );
-                const catalogById = new Map(
-                    [...cachedRemoteTracks, ...MOCK_TRACKS].map((track) => [
-                        track.id,
-                        track,
-                    ])
-                );
-                const currentCatalog = [...catalogById.values()];
-                setAvailableTracks(currentCatalog);
-
-                const storedLiked = await AsyncStorage.getItem(STORAGE_KEYS.LIKED_TRACKS);
-                let availableLikedIds = [];
-                if (storedLiked) {
-                    const parsedLiked = JSON.parse(storedLiked);
-                    if (Array.isArray(parsedLiked)) {
-                        const trackIds = new Set(currentCatalog.map((track) => track.id));
-                        availableLikedIds = [...new Set(parsedLiked.filter((id) => trackIds.has(id)))];
-                    }
-                }
-                setLikedTrackIds(availableLikedIds);
-
-                const currentTracksById = new Map(
-                    currentCatalog.map((track) => [track.id, track])
-                );
-                const defaultPlaylistsById = new Map(
-                    DEFAULT_PLAYLISTS.map((playlist) => [playlist.id, playlist])
-                );
-                let migratedPlaylists = DEFAULT_PLAYLISTS;
-                if (storedPlaylists) {
-                    const parsed = parsedStoredPlaylists;
-                    if (Array.isArray(parsed)) {
-                        const savedById = new Map(
-                            parsed.map((playlist) => [playlist.id, playlist])
-                        );
-                        migratedPlaylists = DEFAULT_PLAYLISTS.map((defaultPlaylist) => {
-                            const savedPlaylist = savedById.get(defaultPlaylist.id);
-                            if (!savedPlaylist) return defaultPlaylist;
-                            if (defaultPlaylist.id === 'pl-all-songs') {
-                                return { ...savedPlaylist, ...defaultPlaylist };
-                            }
-                            if (defaultPlaylist.id === 'pl-liked') {
-                                return {
-                                    ...savedPlaylist,
-                                    ...defaultPlaylist,
-                                    tracks: availableLikedIds
-                                        .map((id) => currentTracksById.get(id))
-                                        .filter(Boolean),
-                                };
-                            }
-                            return {
-                                ...savedPlaylist,
-                                tracks: (savedPlaylist.tracks || [])
-                                    .map((track) => currentTracksById.get(track.id))
-                                    .filter(Boolean),
-                            };
-                        });
-
-                        parsed.forEach((playlist) => {
-                            if (defaultPlaylistsById.has(playlist.id)) return;
-                            migratedPlaylists.push({
-                                ...playlist,
-                                tracks: (playlist.tracks || [])
-                                    .map((track) => currentTracksById.get(track.id))
-                                    .filter(Boolean),
-                            });
-                        });
-                    }
-                }
-                setPlaylists(migratedPlaylists);
-                try {
-                    await AsyncStorage.multiSet([
-                        [STORAGE_KEYS.PLAYLISTS, JSON.stringify(migratedPlaylists)],
-                        [STORAGE_KEYS.LIKED_TRACKS, JSON.stringify(availableLikedIds)],
-                    ]);
-                } catch (err) {
-                    console.warn('Error saving migrated music data:', err);
-                }
-
-                let migratedRecents = [];
-                if (storedRecents) {
-                    if (Array.isArray(parsedStoredRecents)) {
-                        migratedRecents = parsedStoredRecents
-                            .map((entry) => {
-                                const track = currentTracksById.get(entry.id);
-                                return track ? { ...track, playedAt: entry.playedAt } : null;
-                            })
-                            .filter(Boolean);
-                    }
-                }
-                setRecentTracks(migratedRecents);
-                try {
-                    await AsyncStorage.setItem(
-                        STORAGE_KEYS.RECENTS,
-                        JSON.stringify(migratedRecents)
-                    );
-                } catch (err) {
-                    console.warn('Error saving migrated recent tracks:', err);
-                }
-            } catch (err) {
-                console.warn('Error loading persisted music data:', err);
-                setIsPrivateSessionLoaded(true);
-            }
-        };
-
-        loadPersistedData();
+    // Helper: Show floating toast
+    const showToast = useCallback((message, icon = '✓') => {
+        setToast({ message, icon, id: Date.now() });
     }, []);
 
+    // Dismiss toast after 2.5s
+    useEffect(() => {
+        if (!toast) return;
+        const timer = setTimeout(() => {
+            setToast(null);
+        }, 2600);
+        return () => clearTimeout(timer);
+    }, [toast]);
+
+    // Keep audioPlayer replenished with the latest available catalog for auto-replenishment
+    useEffect(() => {
+        if (typeof audioPlayer?.setCatalogProvider === 'function') {
+            audioPlayer.setCatalogProvider(() => availableTracks);
+        }
+    }, [availableTracks]);
+
+    // Fetch initial lightweight batch of Audius tracks (25 tracks) on mount to avoid system lag
     useEffect(() => {
         let isMounted = true;
-        Promise.allSettled([fetchAudiusTracks(80)])
+        Promise.allSettled([fetchAudiusTracks(25)])
             .then(([audiusResult]) => {
                 if (!isMounted) return;
                 const remoteTracks = [];
@@ -246,56 +139,200 @@ export const MusicProvider = ({ children }) => {
         };
     }, []);
 
+    // Sync all-songs playlist whenever catalog expands
     useEffect(() => {
         if (availableTracks.length <= MOCK_TRACKS.length) return;
-        setPlaylists((currentPlaylists) => {
-            const updated = currentPlaylists.map((playlist) =>
+        setPlaylists((currentPlaylists) =>
+            currentPlaylists.map((playlist) =>
                 playlist.id === 'pl-all-songs'
                     ? { ...playlist, tracks: availableTracks }
                     : playlist
-            );
-            AsyncStorage.setItem(
-                STORAGE_KEYS.PLAYLISTS,
-                JSON.stringify(updated)
-            ).catch((error) => {
-                console.warn('Error saving music catalog to library:', error);
-            });
-            return updated;
-        });
+            )
+        );
     }, [availableTracks]);
 
-    // Keep audioPlayer replenished with the latest available catalog for auto-replenishment
+    // Load persisted state scoped strictly to the current user
     useEffect(() => {
-        if (typeof audioPlayer?.setCatalogProvider === 'function') {
-            audioPlayer.setCatalogProvider(() => availableTracks);
+        let isCancelled = false;
+        const uid = currentUserId;
+
+        // If user changed or logged out, stop/reset playback immediately so nothing bleeds into another account
+        if (activeUserIdRef.current !== uid) {
+            if (typeof audioPlayer?.reset === 'function') {
+                audioPlayer.reset();
+            }
+            activeUserIdRef.current = uid;
+            // Clear immediate state while loading
+            setLikedTrackIds([]);
+            setUserQueue([]);
+            setRecentTracks([]);
+            setPlaylists(buildInitialPlaylists(availableTracks, []));
         }
-    }, [availableTracks]);
 
-    // Helper: Show floating toast
-    const showToast = useCallback((message, icon = '✓') => {
-        setToast({ message, icon, id: Date.now() });
-    }, []);
+        const loadUserPersistedData = async () => {
+            try {
+                const playlistsKey = getUserStorageKey(uid, 'playlists');
+                const likedKey = getUserStorageKey(uid, 'liked_tracks');
+                const recentsKey = getUserStorageKey(uid, 'recents');
+                const queueKey = getUserStorageKey(uid, 'user_queue');
+                const privateSessionKey = getUserStorageKey(uid, 'private_session');
 
-    // Dismiss toast after 2.5s
-    useEffect(() => {
-        if (!toast) return;
-        const timer = setTimeout(() => {
-            setToast(null);
-        }, 2600);
-        return () => clearTimeout(timer);
-    }, [toast]);
+                const [
+                    storedPlaylists,
+                    storedLiked,
+                    storedRecents,
+                    storedQueue,
+                    storedPrivateSession,
+                ] = await Promise.all([
+                    AsyncStorage.getItem(playlistsKey),
+                    AsyncStorage.getItem(likedKey),
+                    AsyncStorage.getItem(recentsKey),
+                    AsyncStorage.getItem(queueKey),
+                    AsyncStorage.getItem(privateSessionKey),
+                ]);
 
-    // Save playlists
+                if (isCancelled) return;
+
+                if (storedPrivateSession !== null) {
+                    setPrivateSessionState(JSON.parse(storedPrivateSession) === true);
+                }
+                setIsPrivateSessionLoaded(true);
+
+                // Liked track IDs: check local storage + Firestore profile
+                let resolvedLikedIds = [];
+                if (storedLiked) {
+                    try {
+                        const parsed = JSON.parse(storedLiked);
+                        if (Array.isArray(parsed)) resolvedLikedIds = parsed;
+                    } catch (e) {}
+                }
+
+                if (db && uid) {
+                    try {
+                        const userSnap = await getDoc(doc(db, 'users', uid));
+                        if (userSnap && userSnap.exists && userSnap.exists()) {
+                            const data = userSnap.data();
+                            if (Array.isArray(data?.favoriteTracks) && data.favoriteTracks.length > 0) {
+                                resolvedLikedIds = Array.from(new Set([...resolvedLikedIds, ...data.favoriteTracks]));
+                            }
+                        }
+                    } catch (fsErr) {
+                        console.warn('Firestore user likes retrieval note:', fsErr?.message || fsErr);
+                    }
+                }
+
+                if (isCancelled) return;
+                setLikedTrackIds(resolvedLikedIds);
+
+                const currentTracksById = new Map(availableTracks.map((track) => [track.id, track]));
+                const defaultPlaylists = buildInitialPlaylists(
+                    availableTracks,
+                    resolvedLikedIds.map((id) => currentTracksById.get(id)).filter(Boolean)
+                );
+                const defaultPlaylistsById = new Map(defaultPlaylists.map((p) => [p.id, p]));
+
+                let migratedPlaylists = defaultPlaylists;
+                if (storedPlaylists) {
+                    try {
+                        const parsed = JSON.parse(storedPlaylists);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            const savedById = new Map(parsed.map((p) => [p.id, p]));
+                            migratedPlaylists = defaultPlaylists.map((defaultPlaylist) => {
+                                const savedPlaylist = savedById.get(defaultPlaylist.id);
+                                if (!savedPlaylist) return defaultPlaylist;
+                                if (defaultPlaylist.id === 'pl-all-songs') {
+                                    return { ...savedPlaylist, ...defaultPlaylist };
+                                }
+                                if (defaultPlaylist.id === 'pl-liked') {
+                                    return {
+                                        ...savedPlaylist,
+                                        ...defaultPlaylist,
+                                        tracks: resolvedLikedIds
+                                            .map((id) => currentTracksById.get(id))
+                                            .filter(Boolean),
+                                    };
+                                }
+                                return {
+                                    ...savedPlaylist,
+                                    tracks: (savedPlaylist.tracks || [])
+                                        .map((t) => currentTracksById.get(t.id) || t)
+                                        .filter(Boolean),
+                                };
+                            });
+
+                            // Add user-created playlists
+                            parsed.forEach((playlist) => {
+                                if (defaultPlaylistsById.has(playlist.id)) return;
+                                migratedPlaylists.push({
+                                    ...playlist,
+                                    tracks: (playlist.tracks || [])
+                                        .map((t) => currentTracksById.get(t.id) || t)
+                                        .filter(Boolean),
+                                });
+                            });
+                        }
+                    } catch (e) {
+                        console.warn('Error parsing user playlists:', e);
+                    }
+                }
+
+                if (isCancelled) return;
+                setPlaylists(migratedPlaylists);
+
+                // Queue
+                if (storedQueue) {
+                    try {
+                        const parsedQueue = JSON.parse(storedQueue);
+                        if (Array.isArray(parsedQueue)) {
+                            setUserQueue(parsedQueue);
+                        }
+                    } catch (e) {}
+                } else {
+                    setUserQueue([]);
+                }
+
+                // Recents
+                let migratedRecents = [];
+                if (storedRecents) {
+                    try {
+                        const parsedRecents = JSON.parse(storedRecents);
+                        if (Array.isArray(parsedRecents)) {
+                            migratedRecents = parsedRecents
+                                .map((entry) => {
+                                    const track = currentTracksById.get(entry.id);
+                                    return track ? { ...track, playedAt: entry.playedAt } : entry;
+                                })
+                                .filter(Boolean);
+                        }
+                    } catch (e) {}
+                }
+                if (isCancelled) return;
+                setRecentTracks(migratedRecents);
+            } catch (err) {
+                console.warn('Error loading user-scoped music data:', err);
+                setIsPrivateSessionLoaded(true);
+            }
+        };
+
+        loadUserPersistedData();
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [currentUserId, availableTracks]);
+
+    // Save playlists scoped to the active user
     const savePlaylists = async (newList) => {
         setPlaylists(newList);
+        const uid = activeUserIdRef.current;
         try {
-            await AsyncStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(newList));
+            await AsyncStorage.setItem(getUserStorageKey(uid, 'playlists'), JSON.stringify(newList));
         } catch (err) {
-            console.warn('Error saving playlists:', err);
+            console.warn('Error saving user playlists:', err);
         }
     };
 
-    // Create a new playlist with optional creator profile
+    // Create a new playlist with creator profile
     const createPlaylist = useCallback(async ({ title, description = '', icon = '🎶', creator = null, cover = null }) => {
         if (!title || !title.trim()) return null;
         const cleanTitle = title.trim();
@@ -360,12 +397,12 @@ export const MusicProvider = ({ children }) => {
 
     // Delete a playlist
     const deletePlaylist = useCallback(async (playlistId) => {
-        const target = playlists.find(p => p.id === playlistId);
+        const target = playlists.find((p) => p.id === playlistId);
         if (target?.isDefault) {
-            showToast("Cannot delete default playlist", "⚠️");
+            showToast('Cannot delete default playlist', '⚠️');
             return;
         }
-        const updated = playlists.filter(p => p.id !== playlistId);
+        const updated = playlists.filter((p) => p.id !== playlistId);
         await savePlaylists(updated);
         showToast(`Deleted playlist`, '🗑️');
     }, [playlists, showToast]);
@@ -374,12 +411,12 @@ export const MusicProvider = ({ children }) => {
     const addTrackToPlaylist = useCallback(async (playlistId, track) => {
         if (!track) return false;
         let targetTitle = '';
-        const updated = playlists.map(pl => {
+        const updated = playlists.map((pl) => {
             if (pl.id === playlistId) {
                 targetTitle = pl.title;
-                const exists = (pl.tracks || []).some(t => t.id === track.id);
+                const exists = (pl.tracks || []).some((t) => t.id === track.id);
                 if (exists) {
-                    return pl; // already exists
+                    return pl;
                 }
                 return {
                     ...pl,
@@ -396,14 +433,11 @@ export const MusicProvider = ({ children }) => {
 
     // Remove track from a playlist
     const removeTrackFromPlaylist = useCallback(async (playlistId, trackId) => {
-        let removedTitle = '';
-        const updated = playlists.map(pl => {
+        const updated = playlists.map((pl) => {
             if (pl.id === playlistId) {
-                const targetTrack = pl.tracks.find(t => t.id === trackId);
-                if (targetTrack) removedTitle = targetTrack.title;
                 return {
                     ...pl,
-                    tracks: (pl.tracks || []).filter(t => t.id !== trackId),
+                    tracks: (pl.tracks || []).filter((t) => t.id !== trackId),
                 };
             }
             return pl;
@@ -413,40 +447,54 @@ export const MusicProvider = ({ children }) => {
         showToast(`Removed from playlist`, '🗑️');
     }, [playlists, showToast]);
 
-    // Toggle liked track
+    // Toggle liked track - strictly scoped to active user
     const toggleLikeTrack = useCallback(async (track) => {
         if (!track) return;
+        const uid = activeUserIdRef.current;
         const isLikedNow = likedTrackIds.includes(track.id);
         let newLiked;
         if (isLikedNow) {
-            newLiked = likedTrackIds.filter(id => id !== track.id);
+            newLiked = likedTrackIds.filter((id) => id !== track.id);
             showToast(`Removed from Liked Songs`, '♡');
-            // Remove from liked playlist too
-            const updatedPlaylists = playlists.map(pl => {
-                if (pl.id === 'pl-liked') {
-                    return { ...pl, tracks: (pl.tracks || []).filter(t => t.id !== track.id) };
-                }
-                return pl;
-            });
-            savePlaylists(updatedPlaylists);
         } else {
             newLiked = [track.id, ...likedTrackIds];
             showToast(`Saved to your Liked Songs`, '💚');
-            // Add to liked playlist
-            const updatedPlaylists = playlists.map(pl => {
-                if (pl.id === 'pl-liked') {
-                    const exists = (pl.tracks || []).some(t => t.id === track.id);
-                    return exists ? pl : { ...pl, tracks: [track, ...(pl.tracks || [])] };
-                }
-                return pl;
-            });
-            savePlaylists(updatedPlaylists);
         }
 
         setLikedTrackIds(newLiked);
+
+        // Update Liked Songs playlist for this user
+        const updatedPlaylists = playlists.map((pl) => {
+            if (pl.id === 'pl-liked') {
+                const tracks = isLikedNow
+                    ? (pl.tracks || []).filter((t) => t.id !== track.id)
+                    : [(pl.tracks || []).some((t) => t.id === track.id) ? null : track, ...(pl.tracks || [])].filter(Boolean);
+                return { ...pl, tracks };
+            }
+            return pl;
+        });
+        await savePlaylists(updatedPlaylists);
+
+        // Persist liked tracks specifically for this user
         try {
-            await AsyncStorage.setItem(STORAGE_KEYS.LIKED_TRACKS, JSON.stringify(newLiked));
-        } catch (e) {}
+            await AsyncStorage.setItem(getUserStorageKey(uid, 'liked_tracks'), JSON.stringify(newLiked));
+        } catch (e) {
+            console.warn('Error saving user liked tracks:', e);
+        }
+
+        // Sync with Firestore profile if logged in
+        if (db && uid) {
+            setDoc(
+                doc(db, 'users', uid),
+                {
+                    favoriteTracks: newLiked,
+                    updatedAt: serverTimestamp(),
+                },
+                { merge: true }
+            ).catch((err) => {
+                console.warn('Firestore favoriteTracks sync warning:', err);
+            });
+        }
     }, [likedTrackIds, playlists, showToast]);
 
     const isLiked = useCallback((trackId) => {
@@ -456,7 +504,12 @@ export const MusicProvider = ({ children }) => {
     // Add to user queue - inserted right after current song to play NEXT
     const addToQueue = useCallback((track) => {
         if (!track) return;
-        setUserQueue(prev => [...prev, track]);
+        const uid = activeUserIdRef.current;
+        setUserQueue((prev) => {
+            const updated = [...prev, track];
+            AsyncStorage.setItem(getUserStorageKey(uid, 'user_queue'), JSON.stringify(updated)).catch(() => {});
+            return updated;
+        });
         if (typeof audioPlayer.addToQueueNext === 'function') {
             audioPlayer.addToQueueNext(track);
         } else {
@@ -471,28 +524,36 @@ export const MusicProvider = ({ children }) => {
     }, [showToast]);
 
     const removeFromQueue = useCallback((index) => {
-        setUserQueue(prev => prev.filter((_, idx) => idx !== index));
+        const uid = activeUserIdRef.current;
+        setUserQueue((prev) => {
+            const updated = prev.filter((_, idx) => idx !== index);
+            AsyncStorage.setItem(getUserStorageKey(uid, 'user_queue'), JSON.stringify(updated)).catch(() => {});
+            return updated;
+        });
         audioPlayer.removeFromQueue(index);
     }, []);
 
     const clearQueue = useCallback(() => {
+        const uid = activeUserIdRef.current;
         setUserQueue([]);
+        AsyncStorage.removeItem(getUserStorageKey(uid, 'user_queue')).catch(() => {});
         audioPlayer.clearQueue();
         showToast('Queue cleared', '✓');
     }, [showToast]);
 
-    // Record played track (recents + stats)
+    // Record played track (recents + stats) scoped to active user
     const recordTrackPlayed = useCallback(async (track) => {
         if (!track || !isPrivateSessionLoaded || privateSession) return;
+        const uid = activeUserIdRef.current;
         const entry = {
             ...track,
             playedAt: Date.now(),
         };
 
-        setRecentTracks(prev => {
-            const filtered = prev.filter(t => t.id !== track.id);
+        setRecentTracks((prev) => {
+            const filtered = prev.filter((t) => t.id !== track.id);
             const updated = [entry, ...filtered].slice(0, 30);
-            AsyncStorage.setItem(STORAGE_KEYS.RECENTS, JSON.stringify(updated)).catch((error) => {
+            AsyncStorage.setItem(getUserStorageKey(uid, 'recents'), JSON.stringify(updated)).catch((error) => {
                 console.warn('Could not save recent listening history:', error);
             });
             return updated;
@@ -500,8 +561,9 @@ export const MusicProvider = ({ children }) => {
     }, [isPrivateSessionLoaded, privateSession]);
 
     const setPrivateSession = useCallback(async (enabled) => {
+        const uid = activeUserIdRef.current;
         try {
-            await AsyncStorage.setItem(STORAGE_KEYS.PRIVATE_SESSION, JSON.stringify(enabled));
+            await AsyncStorage.setItem(getUserStorageKey(uid, 'private_session'), JSON.stringify(enabled));
             setPrivateSessionState(enabled);
         } catch (error) {
             console.warn('Could not save private session setting:', error);
@@ -510,8 +572,9 @@ export const MusicProvider = ({ children }) => {
     }, []);
 
     const clearRecentTracks = useCallback(async () => {
+        const uid = activeUserIdRef.current;
         try {
-            await AsyncStorage.removeItem(STORAGE_KEYS.RECENTS);
+            await AsyncStorage.removeItem(getUserStorageKey(uid, 'recents'));
             setRecentTracks([]);
         } catch (error) {
             console.warn('Could not clear recent listening history:', error);

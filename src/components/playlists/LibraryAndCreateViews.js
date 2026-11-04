@@ -5,7 +5,6 @@ import {
     StyleSheet,
     ScrollView,
     TouchableOpacity,
-    Alert,
 } from 'react-native';
 import { COLORS, SPACE, RADIUS } from '../../constants/theme';
 import { useMusic } from '../../context/MusicContext';
@@ -118,27 +117,6 @@ export const CreateView = ({ onOpenPlaylist, onSwitchToLibrary, userProfile }) =
             desc: 'Build a playlist with songs or episodes',
             icon: '🎶',
             action: () => setIsCreateModalOpen(true),
-        },
-        {
-            id: 'c2',
-            title: 'Blend',
-            desc: 'Combine tastes with friends into a shared playlist',
-            icon: '👥',
-            action: () => Alert.alert('Spotify Blend', 'Invite a friend to blend your music tastes together!'),
-        },
-        {
-            id: 'c3',
-            title: 'Folder',
-            desc: 'Organize your playlists neatly into folders',
-            icon: '📁',
-            action: () => Alert.alert('New Folder', 'Playlist folders help categorize your favorite genres.'),
-        },
-        {
-            id: 'c4',
-            title: 'Jam Session',
-            desc: 'Listen together with friends in real time',
-            icon: '📻',
-            action: () => Alert.alert('Spotify Jam', 'Starting a live Jam session. Friends can join with a code or link.'),
         },
     ];
 

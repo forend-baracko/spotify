@@ -133,6 +133,10 @@ const HomeScreen = ({ navigation }) => {
   const [isHomeSearchOpen, setIsHomeSearchOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(TABS.HOME);
   const [homeFilter, setHomeFilter] = useState('All');
+  const [recommendedPage, setRecommendedPage] = useState(1);
+  const [searchPage, setSearchPage] = useState(1);
+  const RECOMMENDED_PAGE_SIZE = 10;
+  const SEARCH_PAGE_SIZE = 15;
   const [isPlayerModalOpen, setIsPlayerModalOpen] = useState(false);
   const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
   const [isRecentsModalOpen, setIsRecentsModalOpen] = useState(false);
@@ -198,10 +202,16 @@ const HomeScreen = ({ navigation }) => {
     let unsubscribe = null;
     try {
       if (typeof audioPlayer?.getQueue === 'function' && audioPlayer.getQueue().length === 0) {
-        audioPlayer.setQueue(musicCatalog, 0);
+        audioPlayer.setQueue(musicCatalog.slice(0, 8), 0);
       }
       if (typeof audioPlayer?.addListener === 'function') {
         unsubscribe = audioPlayer.addListener((event, data) => {
+          if (event === 'reset' || data?.track === null) {
+            setCurrentTrack(null);
+            setIsPlaying(false);
+            setCurrentTime(0);
+            return;
+          }
           if (event === 'error' && data?.error) {
             Alert.alert(
               'Playback unavailable',
@@ -234,19 +244,14 @@ const HomeScreen = ({ navigation }) => {
   }, [musicCatalog]);
 
   useEffect(() => {
-    if (musicCatalog.length <= MOCK_TRACKS.length) return;
-    const queue = audioPlayer.getQueue();
-    const queuedIds = new Set(queue.map((track) => track.id));
-    const newlyAvailableTracks = musicCatalog.filter(
-      (track) => !queuedIds.has(track.id)
-    );
-    if (newlyAvailableTracks.length > 0) {
-      audioPlayer.setQueue(
-        [...queue, ...newlyAvailableTracks],
-        audioPlayer.getCurrentIndex()
-      );
+    if (!currentUser && !authContextValue?.user) {
+      if (typeof audioPlayer?.reset === 'function') {
+        audioPlayer.reset();
+      }
+      setCurrentTrack(null);
+      setIsPlaying(false);
     }
-  }, [musicCatalog]);
+  }, [currentUser, authContextValue?.user]);
 
   const handlePlayTrack = (track, queueTracks = musicCatalog) => {
     if (!track) return;
@@ -358,6 +363,11 @@ const HomeScreen = ({ navigation }) => {
 
   const handleSignOut = async () => {
     try {
+      if (typeof audioPlayer?.reset === 'function') {
+        audioPlayer.reset();
+      }
+      setCurrentTrack(null);
+      setIsPlaying(false);
       if (typeof authContextValue?.logout === 'function') {
         await authContextValue.logout();
       } else if (typeof authContextValue?.signOut === 'function') {
@@ -387,14 +397,19 @@ const HomeScreen = ({ navigation }) => {
     })),
     ...HOME_SHORTCUTS,
   ];
-  const recommendedTracks = musicCatalog.filter((track) => {
+  const allFilteredRecommended = musicCatalog.filter((track) => {
     const query = searchQuery.trim().toLowerCase();
     return (
       !query ||
       track.title.toLowerCase().includes(query) ||
       track.artist.toLowerCase().includes(query)
     );
-  }).slice(0, homeFilter === 'Music' ? musicCatalog.length : 6);
+  });
+  const recommendedTracks = homeFilter === 'Music'
+    ? allFilteredRecommended.slice(0, recommendedPage * RECOMMENDED_PAGE_SIZE)
+    : allFilteredRecommended.slice(0, 6);
+  const hasMoreRecommended = homeFilter === 'Music' && (recommendedPage * RECOMMENDED_PAGE_SIZE < allFilteredRecommended.length);
+
   const localSearchResults = musicCatalog.filter((track) => {
     const query = searchQuery.trim().toLowerCase();
     return (
@@ -407,10 +422,28 @@ const HomeScreen = ({ navigation }) => {
     );
   });
   const localSearchIds = new Set(localSearchResults.map((track) => track.id));
-  const searchResults = [
+  const allSearchResults = [
     ...localSearchResults,
     ...audiusSearchResults.filter((track) => !localSearchIds.has(track.id)),
   ];
+  const searchResults = allSearchResults.slice(0, searchPage * SEARCH_PAGE_SIZE);
+  const hasMoreSearchResults = searchPage * SEARCH_PAGE_SIZE < allSearchResults.length;
+
+  const handleHomeScroll = ({ nativeEvent }) => {
+    const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+    const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 250;
+    if (isNearBottom && hasMoreRecommended) {
+      setRecommendedPage((prev) => prev + 1);
+    }
+  };
+
+  const handleSearchScroll = ({ nativeEvent }) => {
+    const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+    const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 250;
+    if (isNearBottom && hasMoreSearchResults) {
+      setSearchPage((prev) => prev + 1);
+    }
+  };
   const progressPercent = Math.min(
     100,
     Math.max(0, ((currentTime || 0) / (duration || 230)) * 100)
@@ -422,7 +455,11 @@ const HomeScreen = ({ navigation }) => {
 
       <View style={styles.contentContainer}>
         {activeTab === TABS.SEARCH ? (
-          <ScrollView contentContainerStyle={styles.scrollContent}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            onScroll={handleSearchScroll}
+            scrollEventThrottle={32}
+          >
             <View style={styles.searchHeader}>
               <View style={styles.searchHeaderLeft}>
                 <TouchableOpacity
@@ -545,6 +582,15 @@ const HomeScreen = ({ navigation }) => {
                 }) : isMusicSearchLoading ? null : (
                   <Text style={styles.noRecommendedTracks}>No results found. Try another search.</Text>
                 )}
+                {hasMoreSearchResults && (
+                  <TouchableOpacity
+                    style={styles.loadMoreButton}
+                    onPress={() => setSearchPage((prev) => prev + 1)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.loadMoreButtonText}>Load more results</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ) : (
               <View style={styles.categoryGrid}>
@@ -582,7 +628,12 @@ const HomeScreen = ({ navigation }) => {
             userProfile={currentUser}
           />
         ) : (
-          <ScrollView contentContainerStyle={styles.homeScrollContent} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={styles.homeScrollContent}
+            showsVerticalScrollIndicator={false}
+            onScroll={handleHomeScroll}
+            scrollEventThrottle={32}
+          >
             <View style={styles.homeFilterRow}>
               <TouchableOpacity
                 style={styles.homeAvatar}
@@ -605,7 +656,10 @@ const HomeScreen = ({ navigation }) => {
                   <TouchableOpacity
                     key={filter}
                     style={[styles.homeFilterChip, isActive && styles.homeFilterChipActive]}
-                    onPress={() => setHomeFilter(filter)}
+                    onPress={() => {
+                      setHomeFilter(filter);
+                      setRecommendedPage(1);
+                    }}
                     accessibilityRole="button"
                     accessibilityState={{ selected: isActive }}
                     accessibilityLabel={filter === 'Music' ? 'Show all music recommendations' : 'Show all recommendations'}
@@ -738,6 +792,15 @@ const HomeScreen = ({ navigation }) => {
                       <Text style={styles.noRecommendedTracks}>
                         No tracks found. Try another search.
                       </Text>
+                    )}
+                    {hasMoreRecommended && (
+                      <TouchableOpacity
+                        style={styles.loadMoreButton}
+                        onPress={() => setRecommendedPage((prev) => prev + 1)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.loadMoreButtonText}>Load more songs</Text>
+                      </TouchableOpacity>
                     )}
                   </View>
                 )}
@@ -2012,5 +2075,20 @@ const styles = StyleSheet.create({
     color: '#C0C7CE',
     fontSize: 13,
     lineHeight: 18,
+  },
+  loadMoreButton: {
+    marginVertical: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: '#242424',
+    borderRadius: 20,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadMoreButtonText: {
+    color: '#1DB954',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
