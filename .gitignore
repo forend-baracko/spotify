@@ -38,8 +38,12 @@ local.properties
 # node.js
 #
 node_modules/
+admin/dist/
 npm-debug.log
 yarn-error.log
+
+# Firebase
+.firebase/
 
 # Environment variables
 .env

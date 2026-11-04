@@ -1,12 +1,104 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // User profile documents: only authenticated users can read, create, and update their own document
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    function signedIn() {
+      return request.auth != null;
     }
 
-    // Default deny for everything else to enforce maximum security
+    function activeAccount() {
+      return signedIn()
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('status', 'active') == 'active');
+    }
+
+    function roleIn(roles) {
+      return activeAccount()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == request.auth.token.role
+        && request.auth.token.role in roles;
+    }
+
+    function canManageUsers() {
+      return roleIn(['super_admin', 'moderator']);
+    }
+
+    function canManageContent() {
+      return roleIn(['super_admin', 'moderator']);
+    }
+
+    function canReadAnalytics() {
+      return roleIn(['super_admin', 'moderator', 'analytics_manager', 'auditor']);
+    }
+
+    function canReadAuditLogs() {
+      return roleIn(['super_admin', 'auditor']);
+    }
+
+    match /users/{userId} {
+      allow get: if canManageUsers()
+        || (signedIn() && request.auth.uid == userId && activeAccount());
+      allow list: if canManageUsers();
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.uid == userId
+        && (!('email' in request.resource.data.keys())
+          || request.resource.data.email == request.auth.token.email)
+        && request.resource.data.keys().hasOnly([
+          'uid', 'email', 'displayName', 'photoURL', 'createdAt', 'updatedAt',
+          'favoriteTracks', 'lastActive'
+        ]);
+      allow update: if signedIn()
+        && request.auth.uid == userId
+        && activeAccount()
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['email'])
+          || request.resource.data.email == request.auth.token.email)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'email', 'displayName', 'photoURL', 'updatedAt', 'favoriteTracks', 'lastActive'
+        ]);
+      allow delete: if false;
+    }
+
+    match /tracks/{trackId} {
+      allow read: if canManageContent()
+        || canReadAnalytics()
+        || (activeAccount() && resource.data.get('status', 'published') == 'published');
+      allow write: if false;
+    }
+
+    match /albums/{albumId} {
+      allow read: if canManageContent()
+        || canReadAnalytics()
+        || (activeAccount() && resource.data.get('status', 'published') == 'published');
+      allow write: if false;
+    }
+
+    match /artists/{artistId} {
+      allow read: if canManageContent()
+        || canReadAnalytics()
+        || (activeAccount() && resource.data.get('status', 'published') == 'published');
+      allow write: if false;
+    }
+
+    match /analytics_daily/{documentId} {
+      allow read: if canReadAnalytics();
+      allow write: if false;
+    }
+
+    match /analytics_hourly/{documentId} {
+      allow read: if canReadAnalytics();
+      allow write: if false;
+    }
+
+    match /analytics_live/{documentId} {
+      allow read: if canReadAnalytics();
+      allow write: if false;
+    }
+
+    match /audit_logs/{logId} {
+      allow read: if canReadAuditLogs();
+      allow write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

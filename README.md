@@ -125,6 +125,21 @@ If you're having issues getting the above steps to work, see the [Troubleshootin
 
 # Learn More
 
+## Admin web console
+
+The separate React/TypeScript admin console lives in `admin/`; it does not replace the React Native app.
+
+1. Create a Firebase Web App in the same project and enable Email/Password authentication, Firestore, Cloud Functions, and Storage.
+2. Copy `admin/.env.example` to `admin/.env.local` and add the Firebase Web App configuration. These `VITE_` values are public client configuration, not service-account credentials.
+3. Install the two isolated app/backend dependency sets with `npm install --prefix admin` and `npm install --prefix functions`.
+4. Create the initial administrator account in Firebase Authentication and copy its UID. Set `BOOTSTRAP_ADMIN_UID` in `functions/.env.<project-id>` and the same UID as `VITE_BOOTSTRAP_ADMIN_UID` in `admin/.env.local`. The server-side value is the authorization check; the Vite value only controls whether the setup button is displayed.
+5. Run `npm run admin` for the web console. Sign in as the configured bootstrap account and select **Initialize super admin**.
+6. Deploy with the Firebase CLI after selecting the intended project: `npm run deploy:admin`. This deploys Hosting, callable Functions, Firestore rules/indexes, and Storage rules.
+
+The web console subscribes to `/users`, `/tracks`, `/analytics_live/global`, `/analytics_hourly`, `/analytics_daily`, and `/audit_logs`. Daily analytics documents use `date` (`YYYY-MM-DD`), `streams`, `regionalDistribution`, and `deviceBreakdown`; hourly documents use a Firestore `timestamp` and the same aggregate fields. The all-time view reads at most 1,000 daily documents. Live listener counts come from `/analytics_live/global` (`activeListeners`). The mobile app does not currently write streaming analytics; ingestion/aggregation should be supplied by trusted server-side event processing.
+
+Only callable Cloud Functions modify account roles/status, moderation state, and audit records. Custom claims are the authorization source; supported roles are `super_admin`, `moderator`, `analytics_manager`, `auditor`, and `user`. Suspensions revoke refresh tokens, and Firestore rules block restricted/suspended accounts from reading their own profile and published catalog data. Audit records are client-immutable. The bootstrap UID must be removed from the Functions environment after initial setup; use a super administrator to grant any additional roles.
+
 To learn more about React Native, take a look at the following resources:
 
 - [React Native Website](https://reactnative.dev) - learn more about React Native.

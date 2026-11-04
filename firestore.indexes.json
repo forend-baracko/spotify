@@ -1,0 +1,54 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "tracks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "title", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "albums",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "title", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "artists",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "name", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "audit_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "severity", "order": "ASCENDING"         },
+        {
+          "collectionGroup": "audit_logs",
+          "queryScope": "COLLECTION",
+          "fields": [
+            { "fieldPath": "action", "order": "ASCENDING" },
+            { "fieldPath": "timestamp", "order": "DESCENDING" }
+          ]
+        },
+        {
+          "collectionGroup": "audit_logs",
+          "queryScope": "COLLECTION",
+          "fields": [
+            { "fieldPath": "severity", "order": "ASCENDING" },
+            { "fieldPath": "action", "order": "ASCENDING" },
+            { "fieldPath": "timestamp", "order": "DESCENDING" }
+          ]
+        },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

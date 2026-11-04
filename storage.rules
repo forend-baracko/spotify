@@ -1,0 +1,22 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isContentModerator() {
+      return request.auth != null
+        && (request.auth.token.admin == true || request.auth.token.moderator == true);
+    }
+
+    match /admin-assets/{assetId} {
+      allow read: if isContentModerator();
+      allow create, update: if isContentModerator()
+        && request.resource.size < 100 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+          || request.resource.contentType.matches('audio/.*'));
+      allow delete: if isContentModerator();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
