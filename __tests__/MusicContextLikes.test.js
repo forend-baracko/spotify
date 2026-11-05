@@ -9,6 +9,7 @@ const mockGetDocs = jest.fn();
 const mockDeleteDoc = jest.fn();
 const mockDoc = jest.fn((...parts) => parts);
 const mockCollection = jest.fn((...parts) => parts);
+let mockPlaybackListener;
 
 jest.mock('firebase/firestore', () => ({
   collection: (...parts) => mockCollection(...parts),
@@ -31,7 +32,10 @@ jest.mock('../src/services/audiusService', () => ({
 jest.mock('../src/services/audioPlayer', () => ({
   __esModule: true,
   default: {
-    addListener: jest.fn(() => jest.fn()),
+    addListener: jest.fn((callback) => {
+      mockPlaybackListener = callback;
+      return jest.fn();
+    }),
     reset: jest.fn(),
     setCatalogProvider: jest.fn(),
   },
@@ -48,6 +52,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 describe('MusicContext liked songs', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPlaybackListener = null;
     AsyncStorage.getItem.mockResolvedValue(null);
     mockGetDoc.mockResolvedValue({ exists: () => false });
     mockGetDocs.mockResolvedValue({ docs: [] });
@@ -141,4 +146,39 @@ describe('MusicContext liked songs', () => {
     );
     await ReactTestRenderer.act(() => renderer.unmount());
   });
+
+  it('writes a Firestore heartbeat while a signed-in user is playing', async () => {
+    let renderer;
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(
+        <MusicProvider>
+          <CaptureMusicForHeartbeat />
+        </MusicProvider>
+      );
+      await Promise.resolve();
+    });
+
+    await ReactTestRenderer.act(async () => {
+      mockPlaybackListener('status', {
+        track: { id: 'song-1' },
+        isPlaying: true,
+      });
+      await Promise.resolve();
+    });
+
+    expect(mockDoc).toHaveBeenCalledWith({}, 'listener_sessions', 'user-1');
+    expect(mockSetDoc).toHaveBeenCalledWith(
+      [{}, 'listener_sessions', 'user-1'],
+      {
+        uid: 'user-1',
+        isPlaying: true,
+        lastHeartbeat: 'server-timestamp',
+      }
+    );
+    await ReactTestRenderer.act(() => renderer.unmount());
+  });
 });
+
+function CaptureMusicForHeartbeat() {
+  return null;
+}

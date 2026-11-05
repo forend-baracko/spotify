@@ -3,36 +3,15 @@ const express = require('express');
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const GEMINI_MODELS_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const PREFERRED_GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+const SPECIALIZED_FLASH_MODEL_PATTERN = /-(?:tts|audio|image|live)(?:-|$)/i;
 const MAX_PROMPT_LENGTH = 500;
 const MAX_TRACKS = 50;
 const GEMINI_REQUEST_TIMEOUT_MS = 60000;
-const GEMINI_OVERLOAD_RETRY_DELAY_MS = 350;
-
-const waitForRetry = (delayMs, signal) => new Promise((resolve, reject) => {
-  if (signal.aborted) {
-    const error = new Error('Gemini request was aborted.');
-    error.name = 'AbortError';
-    reject(error);
-    return;
-  }
-
-  const cleanup = () => signal.removeEventListener('abort', onAbort);
-  const timer = setTimeout(() => {
-    cleanup();
-    resolve();
-  }, delayMs);
-  const onAbort = () => {
-    clearTimeout(timer);
-    cleanup();
-    const error = new Error('Gemini request was aborted.');
-    error.name = 'AbortError';
-    reject(error);
-  };
-  signal.addEventListener('abort', onAbort, { once: true });
-});
-
 const getGeminiAccessError = (status) => {
-  if (status === 400 || status === 401) {
+  if (status === 400) {
+    return 'Gemini rejected the request (400). Verify API key access to the Generative Language API and that the selected model supports content generation.';
+  }
+  if (status === 401) {
     return 'Gemini rejected the API key. Verify GEMINI_API_KEY in the backend .env is valid, then restart npm run server.';
   }
   if (status === 403) {
@@ -45,7 +24,7 @@ const getGeminiAccessError = (status) => {
     return 'Gemini quota is exhausted for the available models. Wait for the quota to reset or review the Google AI Studio rate limits and billing for this API key.';
   }
   if (status === 503) {
-    return 'Gemini is temporarily overloaded. The server tried other models available to this API key; please wait a moment and retry.';
+    return 'Gemini is temporarily overloaded. Please wait a moment and retry.';
   }
   return 'Gemini returned a temporary service error. Please retry in a moment.';
 };
@@ -55,7 +34,10 @@ const requestGeminiContent = async ({ fetchImpl, env, signal, requestBody }) => 
     `${GEMINI_MODELS_URL}?pageSize=1000&key=${encodeURIComponent(env.GEMINI_API_KEY)}`,
     { signal }
   );
-  if (!modelsResponse.ok) return modelsResponse;
+  if (!modelsResponse.ok) {
+    console.warn('Gemini model discovery request failed with status:', modelsResponse.status);
+    return modelsResponse;
+  }
 
   let modelList;
   try {
@@ -78,47 +60,60 @@ const requestGeminiContent = async ({ fetchImpl, env, signal, requestBody }) => 
               : '';
           return modelId;
         })
-        .filter((modelId) => modelId.toLowerCase().includes('flash')))]
+        .filter((modelId) =>
+          modelId.toLowerCase().includes('flash') &&
+          !SPECIALIZED_FLASH_MODEL_PATTERN.test(modelId)
+        ))]
     : [];
   if (!availableFlashModels.length) return { ok: false, status: 404 };
 
+  const compareModelVersions = (left, right) => {
+    const getVersion = (modelId) =>
+      modelId.match(/^gemini-(\d+(?:\.\d+)*)-flash(?:-|$)/i)?.[1]
+        .split('.')
+        .map(Number) || [];
+    const leftVersion = getVersion(left);
+    const rightVersion = getVersion(right);
+    const maxLength = Math.max(leftVersion.length, rightVersion.length);
+    for (let index = 0; index < maxLength; index += 1) {
+      const difference = (rightVersion[index] || 0) - (leftVersion[index] || 0);
+      if (difference !== 0) return difference;
+    }
+    return right.localeCompare(left);
+  };
   const configuredModel = env.GEMINI_MODEL?.trim().replace(/^models\//, '');
+  const stableFlashModels = availableFlashModels
+    .filter((model) => !/preview|experimental|lite/i.test(model))
+    .sort(compareModelVersions);
   const models = [
     ...(configuredModel && availableFlashModels.includes(configuredModel)
       ? [configuredModel]
       : []),
+    ...stableFlashModels,
     ...PREFERRED_GEMINI_MODELS.filter((model) => availableFlashModels.includes(model)),
-    ...availableFlashModels
-      .filter((model) => !/preview|experimental|lite/i.test(model))
-      .sort((left, right) => right.localeCompare(left)),
-    ...availableFlashModels,
+    ...availableFlashModels.sort(compareModelVersions),
   ].filter((model, index, list) => list.indexOf(model) === index)
     .slice(0, 3);
 
   let response;
   for (const [index, model] of models.entries()) {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      response = await fetchImpl(
-        `${GEMINI_API_BASE_URL}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`,
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          signal,
-          body: requestBody,
-        }
-      );
-      if (response.ok || ![404, 429, 503].includes(response.status)) {
-        return response;
+    response = await fetchImpl(
+      `${GEMINI_API_BASE_URL}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        signal,
+        body: requestBody,
       }
-      if (response.status !== 503 || attempt === 1) break;
-
-      console.warn('Gemini model request returned 503; retrying once before trying another model.');
-      await waitForRetry(GEMINI_OVERLOAD_RETRY_DELAY_MS, signal);
+    );
+    if (response.ok || response.status !== 404) {
+      if (!response.ok) {
+        console.warn(`Gemini generation request for ${model} failed with status:`, response.status);
+      }
+      return response;
     }
     if (index < models.length - 1) {
-      console.warn(
-        `Gemini model request returned ${response.status}; trying another model available to this API key.`
-      );
+      console.warn(`Gemini model ${model} returned 404; trying another listed model.`);
     }
   }
 
@@ -387,7 +382,6 @@ const createGeminiRouter = ({
       });
 
       if (!response.ok) {
-        console.warn('Gemini DJ request failed with status:', response.status);
         return sendGeminiError(res, response);
       }
 

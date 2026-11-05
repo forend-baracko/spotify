@@ -218,6 +218,140 @@ describe('Gemini routes', () => {
     expect(String(fetchImpl.mock.calls[1][0])).toContain('models/gemini-2.5-flash:generateContent');
   });
 
+  it('prefers the newest stable Flash model listed for the API key', async () => {
+    const fetchImpl = jest.fn(async (url) => {
+      if (String(url).includes('identitytoolkit.googleapis.com')) {
+        return makeResponse({ users: [{ localId: 'firebase-user' }] });
+      }
+      return makeResponse({
+        candidates: [{
+          content: {
+            parts: [{
+              text: JSON.stringify({
+                title: 'Quiet Evening',
+                intro: 'A gentle set.',
+                trackId: 'track-1',
+              }),
+            }],
+          },
+        }],
+      });
+    });
+    server = await startServer(fetchImpl, TEST_ENV, {
+      modelListResponse: makeResponse({
+        models: [
+          {
+            name: 'models/gemini-2.5-flash',
+            baseModelId: 'gemini-2.5-flash',
+            supportedGenerationMethods: ['generateContent'],
+          },
+          {
+            name: 'models/gemini-3.8-flash',
+            baseModelId: 'gemini-3.8-flash',
+            supportedGenerationMethods: ['generateContent'],
+          },
+        ],
+      }),
+    });
+
+    const response = await request(server, {
+      path: '/dj-set',
+      body: {
+        prompt: 'calm evening',
+        tracks: [{ id: 'track-1', title: 'Quiet Song', artist: 'A Singer' }],
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(String(fetchImpl.mock.calls[1][0])).toContain('models/gemini-3.8-flash:generateContent');
+  });
+
+  it('excludes specialized TTS Flash models from text generation', async () => {
+    const fetchImpl = jest.fn(async (url) => {
+      if (String(url).includes('identitytoolkit.googleapis.com')) {
+        return makeResponse({ users: [{ localId: 'firebase-user' }] });
+      }
+      return makeResponse({
+        candidates: [{
+          content: {
+            parts: [{
+              text: JSON.stringify({
+                title: 'Quiet Evening',
+                intro: 'A gentle set.',
+                trackId: 'track-1',
+              }),
+            }],
+          },
+        }],
+      });
+    });
+    server = await startServer(fetchImpl, TEST_ENV, {
+      modelListResponse: makeResponse({
+        models: [
+          {
+            name: 'models/gemini-3.8-flash-tts',
+            baseModelId: 'gemini-3.8-flash-tts',
+            supportedGenerationMethods: ['generateContent'],
+          },
+          {
+            name: 'models/gemini-2.5-flash',
+            baseModelId: 'gemini-2.5-flash',
+            supportedGenerationMethods: ['generateContent'],
+          },
+        ],
+      }),
+    });
+
+    const response = await request(server, {
+      path: '/dj-set',
+      body: {
+        prompt: 'calm evening',
+        tracks: [{ id: 'track-1', title: 'Quiet Song', artist: 'A Singer' }],
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(String(fetchImpl.mock.calls[1][0])).toContain('models/gemini-2.5-flash:generateContent');
+    expect(String(fetchImpl.mock.calls[1][0])).not.toContain('flash-tts');
+  });
+
+  it('falls back to another listed model only when the selected model returns 404', async () => {
+    const fetchImpl = jest.fn(async (url) => {
+      if (String(url).includes('identitytoolkit.googleapis.com')) {
+        return makeResponse({ users: [{ localId: 'firebase-user' }] });
+      }
+      if (String(url).includes('/models/gemini-2.5-flash:')) {
+        return makeResponse({ error: { message: 'Model is unavailable.' } }, 404);
+      }
+      return makeResponse({
+        candidates: [{
+          content: {
+            parts: [{
+              text: JSON.stringify({
+                title: 'Quiet Evening',
+                intro: 'A gentle set.',
+                trackId: 'track-1',
+              }),
+            }],
+          },
+        }],
+      });
+    });
+    server = await startServer(fetchImpl);
+
+    const response = await request(server, {
+      path: '/dj-set',
+      body: {
+        prompt: 'calm evening',
+        tracks: [{ id: 'track-1', title: 'Quiet Song', artist: 'A Singer' }],
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(String(fetchImpl.mock.calls[2][0])).toContain('models/gemini-2.0-flash:generateContent');
+  });
+
   it('rejects invalid recommendation input before calling Gemini', async () => {
     const fetchImpl = jest.fn(async () => makeResponse({ users: [{ localId: 'user' }] }));
     server = await startServer(fetchImpl);
@@ -299,6 +433,36 @@ describe('Gemini routes', () => {
     expect(response.body.error).not.toContain(TEST_ENV.GEMINI_API_KEY);
   });
 
+  it('distinguishes an API request error from an explicitly rejected API key', async () => {
+    const fetchImpl = jest.fn(async (url) => {
+      if (String(url).includes('identitytoolkit.googleapis.com')) {
+        return makeResponse({ users: [{ localId: 'firebase-user' }] });
+      }
+      return makeResponse({ error: { message: 'Invalid request details.' } }, 400);
+    });
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    server = await startServer(fetchImpl, TEST_ENV, {
+      modelListResponse: makeResponse({ error: { message: 'Invalid request details.' } }, 400),
+    });
+
+    const response = await request(server, {
+      path: '/dj-set',
+      body: {
+        prompt: 'calm evening',
+        tracks: [{ id: 'track-1', title: 'Quiet Song', artist: 'A Singer' }],
+      },
+    });
+
+    expect(response.status).toBe(502);
+    expect(response.body.error).toMatch(/Gemini rejected the request \(400\)/);
+    expect(response.body.error).not.toContain('Invalid request details.');
+    expect(warning).toHaveBeenCalledWith(
+      'Gemini model discovery request failed with status:',
+      400
+    );
+    warning.mockRestore();
+  });
+
   it('uses a model supported by the API key when the configured model is unavailable', async () => {
     const fetchImpl = jest.fn(async (url) => {
       if (String(url).includes('identitytoolkit.googleapis.com')) {
@@ -377,27 +541,12 @@ describe('Gemini routes', () => {
     expect(String(fetchImpl.mock.calls[1][0])).toContain('models/gemini-2.5-flash:generateContent');
   });
 
-  it('falls back to the alternate Flash model when Gemini is overloaded', async () => {
+  it('does not retry or fall back when Gemini is overloaded', async () => {
     const fetchImpl = jest.fn(async (url) => {
       if (String(url).includes('identitytoolkit.googleapis.com')) {
         return makeResponse({ users: [{ localId: 'firebase-user' }] });
       }
-      if (String(url).includes('/models/gemini-2.5-flash:')) {
-        return makeResponse({ error: { message: 'Model is overloaded.' } }, 503);
-      }
-      return makeResponse({
-        candidates: [{
-          content: {
-            parts: [{
-              text: JSON.stringify({
-                title: 'Quiet Evening',
-                intro: 'A gentle set.',
-                trackId: 'track-1',
-              }),
-            }],
-          },
-        }],
-      });
+      return makeResponse({ error: { message: 'Model is overloaded.' } }, 503);
     });
     server = await startServer(fetchImpl);
 
@@ -409,35 +558,17 @@ describe('Gemini routes', () => {
       },
     });
 
-    expect(response.status).toBe(200);
-    expect(response.body.title).toBe('Quiet Evening');
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
-    expect(String(fetchImpl.mock.calls[3][0])).toContain('models/gemini-2.0-flash:generateContent');
+    expect(response.status).toBe(502);
+    expect(response.body.error).toMatch(/temporarily overloaded/i);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
-  it('retries a briefly overloaded model before failing over', async () => {
-    let attempts = 0;
+  it('does not use more model quota after a model returns 429', async () => {
     const fetchImpl = jest.fn(async (url) => {
       if (String(url).includes('identitytoolkit.googleapis.com')) {
         return makeResponse({ users: [{ localId: 'firebase-user' }] });
       }
-      if (String(url).includes('/models/gemini-2.5-flash:') && attempts === 0) {
-        attempts += 1;
-        return makeResponse({ error: { message: 'Model is overloaded.' } }, 503);
-      }
-      return makeResponse({
-        candidates: [{
-          content: {
-            parts: [{
-              text: JSON.stringify({
-                title: 'Quiet Evening',
-                intro: 'A gentle set.',
-                trackId: 'track-1',
-              }),
-            }],
-          },
-        }],
-      });
+      return makeResponse({ error: { message: 'Model quota reached.' } }, 429);
     });
     server = await startServer(fetchImpl);
 
@@ -449,48 +580,9 @@ describe('Gemini routes', () => {
       },
     });
 
-    expect(response.status).toBe(200);
-    expect(response.body.trackId).toBe('track-1');
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
-    expect(String(fetchImpl.mock.calls[1][0])).toContain('models/gemini-2.5-flash:generateContent');
-    expect(String(fetchImpl.mock.calls[2][0])).toContain('models/gemini-2.5-flash:generateContent');
-  });
-
-  it('tries another listed model after a model-specific quota response', async () => {
-    const fetchImpl = jest.fn(async (url) => {
-      if (String(url).includes('identitytoolkit.googleapis.com')) {
-        return makeResponse({ users: [{ localId: 'firebase-user' }] });
-      }
-      if (String(url).includes('/models/gemini-2.5-flash:')) {
-        return makeResponse({ error: { message: 'Model quota reached.' } }, 429);
-      }
-      return makeResponse({
-        candidates: [{
-          content: {
-            parts: [{
-              text: JSON.stringify({
-                title: 'Quiet Evening',
-                intro: 'A gentle set.',
-                trackId: 'track-1',
-              }),
-            }],
-          },
-        }],
-      });
-    });
-    server = await startServer(fetchImpl);
-
-    const response = await request(server, {
-      path: '/dj-set',
-      body: {
-        prompt: 'calm evening',
-        tracks: [{ id: 'track-1', title: 'Quiet Song', artist: 'A Singer' }],
-      },
-    });
-
-    expect(response.status).toBe(200);
-    expect(response.body.title).toBe('Quiet Evening');
-    expect(String(fetchImpl.mock.calls[2][0])).toContain('models/gemini-2.0-flash:generateContent');
+    expect(response.status).toBe(429);
+    expect(response.body.error).toMatch(/quota is exhausted/i);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it('returns quota status and Retry-After when all listed models are limited', async () => {
@@ -518,9 +610,10 @@ describe('Gemini routes', () => {
     expect(response.headers.get('retry-after')).toBe('45');
     expect(response.body.error).toMatch(/quota is exhausted/i);
     expect(response.body.error).toMatch(/AI Studio rate limits/i);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
-  it('explains overload after all configured fallback models fail', async () => {
+  it('explains overload without trying additional models', async () => {
     const fetchImpl = jest.fn(async (url) => {
       if (String(url).includes('identitytoolkit.googleapis.com')) {
         return makeResponse({ users: [{ localId: 'firebase-user' }] });
@@ -539,8 +632,7 @@ describe('Gemini routes', () => {
 
     expect(response.status).toBe(502);
     expect(response.body.error).toMatch(/temporarily overloaded/i);
-    expect(response.body.error).toMatch(/other models available/i);
-    expect(fetchImpl).toHaveBeenCalledTimes(5);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it('does not abort a Gemini request before the configured timeout', async () => {

@@ -93,6 +93,8 @@ export const MusicProvider = ({ children }) => {
     const [privateSession, setPrivateSessionState] = useState(false);
     const [isPrivateSessionLoaded, setIsPrivateSessionLoaded] = useState(false);
     const [toast, setToast] = useState(null); // { message, icon, id }
+    const listenerHeartbeatRef = useRef(null);
+    const recordTrackPlayedRef = useRef(null);
 
     // Helper: Show floating toast
     const showToast = useCallback((message, icon = '✓') => {
@@ -622,6 +624,10 @@ export const MusicProvider = ({ children }) => {
         });
     }, [isPrivateSessionLoaded, privateSession]);
 
+    useEffect(() => {
+        recordTrackPlayedRef.current = recordTrackPlayed;
+    }, [recordTrackPlayed]);
+
     const setPrivateSession = useCallback(async (enabled) => {
         const uid = activeUserIdRef.current;
         try {
@@ -648,18 +654,64 @@ export const MusicProvider = ({ children }) => {
     useEffect(() => {
         if (typeof audioPlayer?.addListener !== 'function') return;
 
+        const uid = currentUserId;
+        if (!db || !uid) return;
+
+        const presenceRef = doc(db, 'listener_sessions', uid);
+        let isDisposed = false;
+        const clearHeartbeat = () => {
+            if (listenerHeartbeatRef.current) {
+                clearInterval(listenerHeartbeatRef.current);
+                listenerHeartbeatRef.current = null;
+            }
+        };
+        const writeHeartbeat = async () => {
+            try {
+                await setDoc(presenceRef, {
+                    uid,
+                    isPlaying: true,
+                    lastHeartbeat: serverTimestamp(),
+                });
+            } catch (error) {
+                console.warn('Could not update active listener presence:', error);
+            }
+        };
+        const syncPresence = (isPlaying) => {
+            if (isPlaying) {
+                if (listenerHeartbeatRef.current) return;
+                writeHeartbeat();
+                listenerHeartbeatRef.current = setInterval(() => {
+                    if (!isDisposed) writeHeartbeat();
+                }, 20_000);
+                return;
+            }
+
+            clearHeartbeat();
+            deleteDoc(presenceRef).catch((error) => {
+                console.warn('Could not clear active listener presence:', error);
+            });
+        };
+
         const unsubscribe = audioPlayer.addListener((event, data) => {
-            if (event === 'status' && data?.track && data?.isPlaying) {
-                recordTrackPlayed(data.track);
+            if (event === 'status') {
+                if (data?.track && data?.isPlaying) recordTrackPlayedRef.current?.(data.track);
+                syncPresence(data?.isPlaying === true);
             }
         });
 
+        if (audioPlayer.getIsPlaying?.()) syncPresence(true);
+
         return () => {
+            isDisposed = true;
+            clearHeartbeat();
+            deleteDoc(presenceRef).catch((error) => {
+                console.warn('Could not clear active listener presence:', error);
+            });
             if (typeof unsubscribe === 'function') {
                 unsubscribe();
             }
         };
-    }, [recordTrackPlayed]);
+    }, [currentUserId]);
 
     const value = {
         playlists,
