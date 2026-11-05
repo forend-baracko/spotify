@@ -63,7 +63,12 @@ export const createGeminiDjSet = async (user, prompt, tracks) => {
       },
       body: JSON.stringify({
         prompt,
-        tracks: tracks.slice(0, 50).map(({ id, title, artist }) => ({ id, title, artist })),
+        tracks: tracks.slice(0, 50).map(({ id, title, artist, categories }) => ({
+          id,
+          title,
+          artist,
+          categories,
+        })),
       }),
     });
   } catch {

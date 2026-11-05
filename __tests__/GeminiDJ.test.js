@@ -74,6 +74,47 @@ describe('GeminiDJ', () => {
       .toHaveLength(1);
   });
 
+  it('shows sorted available categories and limits the DJ catalog to the selected category', async () => {
+    const tracks = [
+      { id: 'sad-track', title: 'Sad Song', artist: 'One', categories: ['Sad', 'OPM'] },
+      { id: 'rap-track', title: 'Rap Song', artist: 'Two', categories: ['Rap'] },
+    ];
+    mockCreateGeminiDjSet.mockResolvedValue({
+      title: 'Sad OPM',
+      intro: 'A reflective pick.',
+      trackId: 'sad-track',
+    });
+
+    let renderer;
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(
+        <GeminiDJ tracks={tracks} onStartSet={jest.fn()} />
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const categoryButtons = renderer.root.findAllByType(TouchableOpacity)
+      .filter((button) => button.props.accessibilityLabel?.startsWith('Category:'));
+    expect(categoryButtons.map((button) => button.props.accessibilityLabel)).toEqual([
+      'Category: OPM',
+      'Category: Rap',
+      'Category: Sad',
+    ]);
+
+    await ReactTestRenderer.act(() => categoryButtons[2].props.onPress());
+    const buildButton = renderer.root.findAllByType(TouchableOpacity)
+      .find((button) => button.findAllByType(Text)
+        .some((text) => text.props.children === 'Pick my track'));
+    await ReactTestRenderer.act(() => buildButton.props.onPress());
+
+    expect(mockCreateGeminiDjSet).toHaveBeenCalledWith(
+      mockUser,
+      'Sad',
+      [tracks[0]]
+    );
+  });
+
   it('offers quota guidance and a retry after Gemini rate limits the request', async () => {
     const tracks = [{ id: 'track-1', title: 'Quiet Song', artist: 'A Singer' }];
     mockCreateGeminiDjSet.mockRejectedValue(

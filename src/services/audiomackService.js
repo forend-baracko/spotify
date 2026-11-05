@@ -1,5 +1,6 @@
 import { AUDIOMACK_CONFIG } from '../constants/config';
 import { MOCK_TRACKS } from '../assets/tracks/mockData';
+import { normalizeTrackCategories } from '../utils/trackCategories';
 
 export { MOCK_TRACKS };
 
@@ -24,6 +25,13 @@ const normalizeApiTracks = (results) =>
       'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80',
     plays: item.plays || '0',
     genre: item.genre || 'Music',
+    categories: normalizeTrackCategories(
+      item.categories,
+      item.tags,
+      item.moods,
+      item.mood,
+      item.genre
+    ),
   }));
 
 const filterLocalTracks = (query) => {

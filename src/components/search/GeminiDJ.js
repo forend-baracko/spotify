@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { createGeminiDjSet, getGeminiStatus } from '../../services/geminiService';
+import TrackCategoriesBrowser from './TrackCategoriesBrowser';
 
 const shuffleTracks = (items) => {
   const shuffled = [...items];
@@ -23,6 +24,7 @@ const shuffleTracks = (items) => {
 const GeminiDJ = ({ tracks, onStartSet }) => {
   const { user } = useAuth();
   const [prompt, setPrompt] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState(null);
   const [djSet, setDjSet] = useState(null);
   const [setTracks, setSetTracks] = useState([]);
   const [error, setError] = useState('');
@@ -55,21 +57,26 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
       setError('Describe the vibe for your DJ set.');
       return;
     }
-    if (!tracks.length) {
+    const catalogTracks = selectedCategory
+      ? tracks.filter((track) => track.categories?.includes(selectedCategory))
+      : tracks;
+    if (!catalogTracks.length) {
       setError('There are no tracks available for a DJ set right now.');
       return;
     }
 
     setIsLoading(true);
     try {
-      const result = await createGeminiDjSet(user, prompt.trim(), tracks);
-      const tracksById = new Map(tracks.map((track) => [track.id, track]));
+      const result = await createGeminiDjSet(user, prompt.trim(), catalogTracks);
+      const tracksById = new Map(catalogTracks.map((track) => [track.id, track]));
       const selectedTrack = tracksById.get(result.trackId);
       if (!selectedTrack) {
         throw new Error('Gemini could not match a track to the available catalog.');
       }
       // Keep initial queue lean to prevent mobile system lag; player auto-replenishes on demand
-      const initialQueue = shuffleTracks(tracks.filter((track) => track.id !== selectedTrack.id)).slice(0, 6);
+      const initialQueue = shuffleTracks(
+        catalogTracks.filter((track) => track.id !== selectedTrack.id)
+      ).slice(0, 6);
       setSetTracks([selectedTrack, ...initialQueue]);
       setDjSet(result);
     } catch (requestError) {
@@ -104,6 +111,15 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
       <Text style={styles.description}>
         Tell your DJ what you’re in the mood for. Gemini picks one matching track, then the rest of your queue is randomized.
       </Text>
+      <TrackCategoriesBrowser
+        tracks={tracks}
+        selectedCategory={selectedCategory}
+        onSelectCategory={(category) => {
+          const nextCategory = selectedCategory === category ? null : category;
+          setSelectedCategory(nextCategory);
+          setPrompt(nextCategory || '');
+        }}
+      />
       {isCheckingStatus ? (
         <ActivityIndicator color="#D5A5E8" />
       ) : isConfigured ? (
@@ -112,7 +128,7 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
             style={styles.input}
             value={prompt}
             onChangeText={setPrompt}
-            placeholder="e.g. mellow acoustic music for a quiet evening"
+            placeholder="e.g. sad OPM R&B or upbeat rap"
             placeholderTextColor="#727272"
             maxLength={500}
             returnKeyType="go"

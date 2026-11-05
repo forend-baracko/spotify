@@ -1,4 +1,5 @@
 import { AUDIO_CONFIG } from '../constants/config';
+import { normalizeTrackCategories } from '../utils/trackCategories';
 
 const API_BASE_URL = 'https://discoveryprovider.audius.co/v1';
 const APP_NAME = 'Spotibai';
@@ -48,6 +49,7 @@ const normalizeTrack = (track) => {
     track.user?.profile_picture?.['480x480'] ||
     '';
   const artist = track.user?.name || track.user?.handle || 'Unknown Artist';
+  const genre = typeof track.genre === 'string' ? track.genre : '';
   const permalink = track.permalink
     ? `https://audius.co${track.permalink.startsWith('/') ? '' : '/'}${track.permalink}`
     : `https://audius.co/track/${trackId}`;
@@ -57,6 +59,14 @@ const normalizeTrack = (track) => {
     title: track.title || 'Untitled',
     artist,
     album: '',
+    ...(genre ? { genre } : {}),
+    categories: normalizeTrackCategories(
+      track.categories,
+      track.tags,
+      track.moods,
+      track.mood,
+      genre
+    ),
     artwork,
     stream_url: getTrackStreamUrl(trackId),
     fallback_stream_url: getDirectTrackStreamUrl(trackId),

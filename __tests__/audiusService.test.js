@@ -43,6 +43,7 @@ describe('Audius music service', () => {
             '1000x1000': 'https://example.test/cover.jpg',
           },
           duration: 205,
+          genre: 'Hip-Hop/Rap',
           permalink: '/artist/full-song',
           is_streamable: true,
         },
@@ -56,6 +57,8 @@ describe('Audius music service', () => {
         title: 'Full Song',
         artist: 'Audius Artist',
         album: '',
+        genre: 'Hip-Hop/Rap',
+        categories: ['Hip-Hop', 'Rap'],
         artwork: 'https://example.test/cover.jpg',
         stream_url:
           'https://discoveryprovider.audius.co/v1/tracks/track-id/stream?app_name=Spotibai',
