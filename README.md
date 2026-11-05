@@ -17,9 +17,21 @@ The root `.env` is local and is not included in Git. Each development computer m
 
 The proxy validates Audius track IDs, forwards byte-range requests for seeking, streams only audio responses, and reports upstream/network errors as gateway errors.
 
+### Deploy a shared backend
+
+For use outside your local network, follow the supplied **AI Integration Guide**, Step 10: deploy this Node backend to a host that provides a stable HTTPS URL. The backend already listens on `0.0.0.0`, uses the host-provided `PORT`, exposes `/health`, and verifies Firebase ID tokens on Gemini requests.
+
+1. Choose a Node host that runs this repository with Node 22.11 or newer and supports the `npm ci` and `npm run server` commands.
+2. Set `GEMINI_API_KEY` and `FIREBASE_API_KEY` in the host's private environment settings. Keep the Gemini key out of the app `.env`, source code, and Git.
+3. Deploy the backend and confirm `https://<your-host>/health` returns `{"status":"ok"}`.
+4. Set the app's `AUDIO_API_BASE_URL` to the host's HTTPS base URL in `.env`, then rebuild and reinstall the app. The URL is bundled into the native app at build time.
+5. Test from a device outside your local Wi-Fi. Sign-in is required for AI DJ requests.
+
+Do not use a plain-HTTP URL in a release app. For a short demo, the guide also describes using a temporary HTTPS tunnel; for ongoing shared use, use a stable hosted HTTPS URL. Hosting plans may sleep when idle, which can slow the first request.
+
 ## Gemini AI DJ
 
-The Search screen can create a Gemini-powered DJ set from the app's available tracks. Configure `GEMINI_API_KEY` and `FIREBASE_API_KEY` in the backend computer's `.env`; keep the Gemini key server-side. Set the app's `AUDIO_API_BASE_URL` to the backend computer's reachable address and run `npm run server` there. For a different computer or physical phone, the backend must be reachable over the network; use that computer's LAN IP on the same Wi-Fi or a deployed HTTPS URL. The Search screen checks backend readiness and shows setup guidance instead of submitting a request when Gemini is unavailable.
+The Search screen can create a Gemini-powered DJ set from the app's available tracks. For local development, configure `GEMINI_API_KEY` and `FIREBASE_API_KEY` in the backend computer's `.env` and run `npm run server`; for shared use, deploy the backend as described above. Keep the Gemini key server-side. Set the app's `AUDIO_API_BASE_URL` to the backend's reachable URL. The Search screen checks backend readiness and shows setup guidance instead of submitting a request when Gemini is unavailable.
 
 Enter a mood or style. Gemini selects one matching track from the available catalog; when you start it, that track plays first and the remaining tracks are shuffled into the queue locally.
 
