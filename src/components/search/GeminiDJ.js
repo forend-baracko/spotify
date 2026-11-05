@@ -80,7 +80,7 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
   };
 
   const isQuotaError = /quota|rate limit/i.test(error);
-  const canRetryError = isQuotaError || /overloaded|temporary service error/i.test(error);
+  const canRetryError = isQuotaError || /overloaded|temporary service error|timed out/i.test(error);
 
   const openQuotaSettings = async () => {
     try {

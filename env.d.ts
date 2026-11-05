@@ -6,6 +6,7 @@ declare module '@env' {
   export const FIREBASE_MESSAGING_SENDER_ID: string | undefined;
   export const FIREBASE_APP_ID: string | undefined;
   export const AUDIOMACK_API_KEY: string | undefined;
+  export const AUDIO_API_BASE_URL: string | undefined;
   export const GOOGLE_WEB_CLIENT_ID: string | undefined;
   export const GOOGLE_IOS_CLIENT_ID: string | undefined;
 }

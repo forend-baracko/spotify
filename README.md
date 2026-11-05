@@ -6,18 +6,20 @@ This is a new [**React Native**](https://reactnative.dev) project, bootstrapped 
 
 ## Audius audio proxy
 
-The app can stream Audius audio through the optional Express proxy:
+The app can stream Audius audio through the Express proxy:
 
-1. Install dependencies with `npm install`.
-2. Set `AUDIO_API_BASE_URL` in the root `.env` to the backend's reachable address, such as `http://localhost:3001` for an iOS simulator or `http://10.0.2.2:3001` for the standard Android emulator. For a physical device, use your computer's LAN IP.
-3. Start the proxy with `npm run server`.
-4. Start Metro and run the app as usual. Audius tracks use `/api/audio/tracks/:trackId` when configured; if the proxy is unavailable, the player automatically retries the direct Audius stream.
+1. Install dependencies with `npm install` and copy `.env.example` to `.env`.
+2. Set `AUDIO_API_BASE_URL` in `.env` to the backend computer's reachable address: `http://localhost:3001` for an iOS simulator, `http://10.0.2.2:3001` for the standard Android emulator, or `http://<computer-LAN-IP>:3001` for a physical phone on the same Wi-Fi.
+3. Start the backend on that computer with `npm run server`. For a physical phone, allow inbound connections to port 3001 through the computer's firewall.
+4. Start Metro and run the app as usual. The app uses `/api/audio/tracks/:trackId` when configured; if the proxy is unavailable, the player automatically retries the direct Audius stream.
+
+The root `.env` is local and is not included in Git. Each development computer must create its own `.env`; after changing `AUDIO_API_BASE_URL`, rebuild/reinstall the native app because the app URL is bundled at build time. `localhost` and `10.0.2.2` only point to the computer hosting the app/emulator; use the backend computer's LAN or deployed address when the backend runs elsewhere.
 
 The proxy validates Audius track IDs, forwards byte-range requests for seeking, streams only audio responses, and reports upstream/network errors as gateway errors.
 
 ## Gemini AI DJ
 
-The Search screen can create a Gemini-powered DJ set from the app's available tracks. Configure `GEMINI_API_KEY` and `FIREBASE_API_KEY` in the backend `.env`; keep the Gemini key server-side. Set the app's `AUDIO_API_BASE_URL` to the reachable backend address and run `npm run server`. The Search screen checks backend readiness and shows setup guidance instead of submitting a request when Gemini is unavailable.
+The Search screen can create a Gemini-powered DJ set from the app's available tracks. Configure `GEMINI_API_KEY` and `FIREBASE_API_KEY` in the backend computer's `.env`; keep the Gemini key server-side. Set the app's `AUDIO_API_BASE_URL` to the backend computer's reachable address and run `npm run server` there. For a different computer or physical phone, the backend must be reachable over the network; use that computer's LAN IP on the same Wi-Fi or a deployed HTTPS URL. The Search screen checks backend readiness and shows setup guidance instead of submitting a request when Gemini is unavailable.
 
 Enter a mood or style. Gemini selects one matching track from the available catalog; when you start it, that track plays first and the remaining tracks are shuffled into the queue locally.
 

@@ -147,4 +147,41 @@ describe('GeminiDJ', () => {
     expect(mockCreateGeminiDjSet).toHaveBeenCalledTimes(2);
     expect(renderer.root.findByProps({ accessibilityLabel: 'Play Quiet Song' })).toBeDefined();
   });
+
+  it('offers a manual retry when the Gemini request times out', async () => {
+    mockCreateGeminiDjSet
+      .mockRejectedValueOnce(new Error('Gemini DJ timed out. Please try again.'))
+      .mockResolvedValueOnce({
+        title: 'Quiet Evening',
+        intro: 'A gentle pick.',
+        trackId: 'track-1',
+      });
+    const tracks = [{ id: 'track-1', title: 'Quiet Song', artist: 'A Singer' }];
+    let renderer;
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(
+        <GeminiDJ tracks={tracks} onStartSet={jest.fn()} />
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const input = renderer.root.findByProps({
+      accessibilityLabel: 'Describe the music you want your AI DJ to pick',
+    });
+    await ReactTestRenderer.act(() => input.props.onChangeText('calm'));
+    const pickButton = () => renderer.root.findAllByType(TouchableOpacity)
+      .find((button) => button.findAllByType(Text)
+        .some((text) => text.props.children === 'Pick my track'));
+    await ReactTestRenderer.act(() => pickButton().props.onPress());
+
+    const retryButton = renderer.root.findAllByType(TouchableOpacity)
+      .find((button) => button.findAllByType(Text)
+        .some((text) => text.props.children === 'Try again'));
+    expect(retryButton).toBeDefined();
+    await ReactTestRenderer.act(() => retryButton.props.onPress());
+
+    expect(mockCreateGeminiDjSet).toHaveBeenCalledTimes(2);
+    expect(renderer.root.findByProps({ accessibilityLabel: 'Play Quiet Song' })).toBeDefined();
+  });
 });
