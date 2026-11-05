@@ -29,7 +29,8 @@ const getGeminiAccessError = (status) => {
   return 'Gemini returned a temporary service error. Please retry in a moment.';
 };
 
-const requestGeminiContent = async ({ fetchImpl, env, signal, requestBody }) => {
+const requestGeminiContent = async ({ fetchImpl, env, signal, requestBody, onStage = () => {} }) => {
+  onStage('model discovery');
   const modelsResponse = await fetchImpl(
     `${GEMINI_MODELS_URL}?pageSize=1000&key=${encodeURIComponent(env.GEMINI_API_KEY)}`,
     { signal }
@@ -89,21 +90,32 @@ const requestGeminiContent = async ({ fetchImpl, env, signal, requestBody }) => 
     ...(configuredModel && availableFlashModels.includes(configuredModel)
       ? [configuredModel]
       : []),
-    ...stableFlashModels,
     ...PREFERRED_GEMINI_MODELS.filter((model) => availableFlashModels.includes(model)),
+    ...stableFlashModels,
     ...availableFlashModels.sort(compareModelVersions),
   ].filter((model, index, list) => list.indexOf(model) === index)
     .slice(0, 3);
 
   let response;
   for (const [index, model] of models.entries()) {
+    onStage('response generation');
+    let body = requestBody;
+    if (/^gemini-2\.5-flash(?:-|$)/i.test(model)) {
+      const request = JSON.parse(requestBody);
+      request.generationConfig = {
+        ...request.generationConfig,
+        maxOutputTokens: 192,
+        thinkingConfig: { thinkingBudget: 0 },
+      };
+      body = JSON.stringify(request);
+    }
     response = await fetchImpl(
       `${GEMINI_API_BASE_URL}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`,
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         signal,
-        body: requestBody,
+        body,
       }
     );
     if (response.ok || response.status !== 404) {
@@ -228,6 +240,7 @@ const createGeminiRouter = ({
 
     const safeTracks = tracks.map(({ id, title, artist }) => ({ id, title, artist }));
     const controller = new AbortController();
+    let requestStage = 'model discovery';
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -235,6 +248,7 @@ const createGeminiRouter = ({
         fetchImpl,
         env,
         signal: controller.signal,
+        onStage: (stage) => { requestStage = stage; },
         requestBody: JSON.stringify({
           contents: [{
             parts: [{
@@ -304,7 +318,10 @@ const createGeminiRouter = ({
       return res.json({ recommendations });
     } catch (error) {
       if (error.name === 'AbortError') {
-        return res.status(504).json({ error: 'Gemini recommendations timed out. Please try again.' });
+        console.warn(`Gemini recommendations timed out during ${requestStage}.`);
+        return res.status(504).json({
+          error: `Gemini ${requestStage} timed out. Check the backend's connection to Google and try again.`,
+        });
       }
       console.warn('Gemini recommendation request failed:', error);
       return res.status(502).json({
@@ -355,6 +372,7 @@ const createGeminiRouter = ({
 
     const safeTracks = tracks.map(({ id, title, artist }) => ({ id, title, artist }));
     const controller = new AbortController();
+    let requestStage = 'model discovery';
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -362,6 +380,7 @@ const createGeminiRouter = ({
         fetchImpl,
         env,
         signal: controller.signal,
+        onStage: (stage) => { requestStage = stage; },
         requestBody: JSON.stringify({
           contents: [{
             parts: [{
@@ -377,6 +396,7 @@ const createGeminiRouter = ({
           generationConfig: {
             temperature: 0.7,
             responseMimeType: 'application/json',
+            maxOutputTokens: 192,
           },
         }),
       });
@@ -424,7 +444,10 @@ const createGeminiRouter = ({
       });
     } catch (error) {
       if (error.name === 'AbortError') {
-        return res.status(504).json({ error: 'Gemini DJ timed out. Please try again.' });
+        console.warn(`Gemini DJ timed out during ${requestStage}.`);
+        return res.status(504).json({
+          error: `Gemini ${requestStage} timed out. Check the backend's connection to Google and try again.`,
+        });
       }
       console.warn('Gemini DJ request failed:', error);
       return res.status(502).json({

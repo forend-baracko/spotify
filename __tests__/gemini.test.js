@@ -218,7 +218,7 @@ describe('Gemini routes', () => {
     expect(String(fetchImpl.mock.calls[1][0])).toContain('models/gemini-2.5-flash:generateContent');
   });
 
-  it('prefers the newest stable Flash model listed for the API key', async () => {
+  it('prefers the stable low-latency Flash model when it is listed', async () => {
     const fetchImpl = jest.fn(async (url) => {
       if (String(url).includes('identitytoolkit.googleapis.com')) {
         return makeResponse({ users: [{ localId: 'firebase-user' }] });
@@ -263,7 +263,7 @@ describe('Gemini routes', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(String(fetchImpl.mock.calls[1][0])).toContain('models/gemini-3.8-flash:generateContent');
+    expect(String(fetchImpl.mock.calls[1][0])).toContain('models/gemini-2.5-flash:generateContent');
   });
 
   it('excludes specialized TTS Flash models from text generation', async () => {
@@ -365,10 +365,12 @@ describe('Gemini routes', () => {
   });
 
   it('returns one selected track from the app catalog', async () => {
-    const fetchImpl = jest.fn(async (url) => {
+    let generationBody;
+    const fetchImpl = jest.fn(async (url, options) => {
       if (String(url).includes('identitytoolkit.googleapis.com')) {
         return makeResponse({ users: [{ localId: 'firebase-user' }] });
       }
+      generationBody = JSON.parse(options.body);
       return makeResponse({
         candidates: [{
           content: {
@@ -403,6 +405,10 @@ describe('Gemini routes', () => {
       trackId: 'track-2',
     });
     expect(String(fetchImpl.mock.calls[1][0])).toContain('models/gemini-2.5-flash:generateContent');
+    expect(generationBody.generationConfig).toEqual(expect.objectContaining({
+      maxOutputTokens: 192,
+      thinkingConfig: { thinkingBudget: 0 },
+    }));
   });
 
   it('explains Gemini API access errors without returning upstream details', async () => {
@@ -702,6 +708,6 @@ describe('Gemini routes', () => {
     });
 
     expect(response.status).toBe(504);
-    expect(response.body.error).toMatch(/timed out/i);
+    expect(response.body.error).toMatch(/response generation timed out/i);
   });
 });
