@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: spotibai-backend
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm run server
+    healthCheckPath: /health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: FIREBASE_API_KEY
+        sync: false

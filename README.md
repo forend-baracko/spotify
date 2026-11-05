@@ -17,17 +17,18 @@ The root `.env` is local and is not included in Git. Each development computer m
 
 The proxy validates Audius track IDs, forwards byte-range requests for seeking, streams only audio responses, and reports upstream/network errors as gateway errors.
 
-### Deploy a shared backend
+### Deploy a shared backend for free
 
-For use outside your local network, follow the supplied **AI Integration Guide**, Step 10: deploy this Node backend to a host that provides a stable HTTPS URL. The backend already listens on `0.0.0.0`, uses the host-provided `PORT`, exposes `/health`, and verifies Firebase ID tokens on Gemini requests.
+The root `render.yaml` configures this Node backend as a **Render Free** web service. To deploy without owning the upstream GitHub repository, fork `forend-baracko/spotify` into your own GitHub account, then connect that fork to Render and create a Blueprint from it.
 
-1. Choose a Node host that runs this repository with Node 22.11 or newer and supports the `npm ci` and `npm run server` commands.
-2. Set `GEMINI_API_KEY` and `FIREBASE_API_KEY` in the host's private environment settings. Keep the Gemini key out of the app `.env`, source code, and Git.
-3. Deploy the backend and confirm `https://<your-host>/health` returns `{"status":"ok"}`.
-4. Set the app's `AUDIO_API_BASE_URL` to the host's HTTPS base URL in `.env`, then rebuild and reinstall the app. The URL is bundled into the native app at build time.
-5. Test from a device outside your local Wi-Fi. Sign-in is required for AI DJ requests.
+1. In GitHub, fork `https://github.com/forend-baracko/spotify` to your personal account. Make sure the fork includes `render.yaml`.
+2. In Render, connect your GitHub account and select your fork. Create the Blueprint service named `spotibai-backend`; keep its plan set to **Free**.
+3. Enter `GEMINI_API_KEY` and `FIREBASE_API_KEY` in Render's private environment-variable prompts. Never put the Gemini key in the app `.env`, source code, or Git.
+4. After deployment, confirm the Render service's `/health` endpoint returns `{"status":"ok"}` and copy the service's HTTPS URL.
+5. Set the app's `AUDIO_API_BASE_URL` to that HTTPS URL in `.env`, then rebuild and reinstall the app. The URL is bundled into the native app at build time.
+6. Test from a device outside your local Wi-Fi. AI DJ requests require a signed-in Firebase user.
 
-Do not use a plain-HTTP URL in a release app. For a short demo, the guide also describes using a temporary HTTPS tunnel; for ongoing shared use, use a stable hosted HTTPS URL. Hosting plans may sleep when idle, which can slow the first request.
+**Free-plan limitations:** Render spins a free service down after 15 minutes without traffic; waking it can take about a minute. Free services share 750 instance-hours per workspace per month. Bandwidth and build usage are also limited. If usage limits are reached, services/builds may be suspended until the quota resets. To avoid charges, choose **Free** and do not add a payment method; Render documents that over-limit usage is suspended when no payment method is on file. Do not use this free service for production or guaranteed availability. The backend must use HTTPS in release apps.
 
 ## Gemini AI DJ
 
