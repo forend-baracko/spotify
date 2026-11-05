@@ -7,6 +7,7 @@ const SPECIALIZED_FLASH_MODEL_PATTERN = /-(?:tts|audio|image|live)(?:-|$)/i;
 const MAX_PROMPT_LENGTH = 500;
 const MAX_TRACKS = 50;
 const GEMINI_REQUEST_TIMEOUT_MS = 60000;
+const GEMINI_MODEL_TIMEOUT_MS = 15000;
 const getGeminiAccessError = (status) => {
   if (status === 400) {
     return 'Gemini rejected the request (400). Verify API key access to the Generative Language API and that the selected model supports content generation.';
@@ -29,7 +30,14 @@ const getGeminiAccessError = (status) => {
   return 'Gemini returned a temporary service error. Please retry in a moment.';
 };
 
-const requestGeminiContent = async ({ fetchImpl, env, signal, requestBody, onStage = () => {} }) => {
+const requestGeminiContent = async ({
+  fetchImpl,
+  env,
+  signal,
+  requestBody,
+  onStage = () => {},
+  modelTimeoutMs = GEMINI_MODEL_TIMEOUT_MS,
+}) => {
   onStage('model discovery');
   const modelsResponse = await fetchImpl(
     `${GEMINI_MODELS_URL}?pageSize=1000&key=${encodeURIComponent(env.GEMINI_API_KEY)}`,
@@ -98,7 +106,7 @@ const requestGeminiContent = async ({ fetchImpl, env, signal, requestBody, onSta
 
   let response;
   for (const [index, model] of models.entries()) {
-    onStage('response generation');
+    onStage(`response generation with ${model}`);
     let body = requestBody;
     if (/^gemini-2\.5-flash(?:-|$)/i.test(model)) {
       const request = JSON.parse(requestBody);
@@ -109,15 +117,43 @@ const requestGeminiContent = async ({ fetchImpl, env, signal, requestBody, onSta
       };
       body = JSON.stringify(request);
     }
-    response = await fetchImpl(
-      `${GEMINI_API_BASE_URL}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        signal,
-        body,
+    const modelController = new AbortController();
+    const abortForOverallTimeout = () => modelController.abort();
+    if (signal.aborted) {
+      modelController.abort();
+    } else {
+      signal.addEventListener('abort', abortForOverallTimeout, { once: true });
+    }
+    let modelTimedOut = false;
+    const modelTimeout = setTimeout(() => {
+      modelTimedOut = true;
+      modelController.abort();
+    }, modelTimeoutMs);
+
+    try {
+      response = await fetchImpl(
+        `${GEMINI_API_BASE_URL}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          signal: modelController.signal,
+          body,
+        }
+      );
+    } catch (error) {
+      if (!modelTimedOut || signal.aborted) throw error;
+      console.warn(`Gemini generation request for ${model} timed out.`);
+      if (index === models.length - 1) {
+        const timeoutError = new Error('All available Gemini models timed out.');
+        timeoutError.name = 'AbortError';
+        throw timeoutError;
       }
-    );
+      continue;
+    } finally {
+      clearTimeout(modelTimeout);
+      signal.removeEventListener('abort', abortForOverallTimeout);
+    }
+
     if (response.ok || response.status !== 404) {
       if (!response.ok) {
         console.warn(`Gemini generation request for ${model} failed with status:`, response.status);
@@ -190,6 +226,7 @@ const createGeminiRouter = ({
   env = process.env,
   fetchImpl = global.fetch,
   timeoutMs = GEMINI_REQUEST_TIMEOUT_MS,
+  modelTimeoutMs = GEMINI_MODEL_TIMEOUT_MS,
 } = {}) => {
   const router = express.Router();
 
@@ -248,6 +285,7 @@ const createGeminiRouter = ({
         fetchImpl,
         env,
         signal: controller.signal,
+        modelTimeoutMs,
         onStage: (stage) => { requestStage = stage; },
         requestBody: JSON.stringify({
           contents: [{
@@ -380,6 +418,7 @@ const createGeminiRouter = ({
         fetchImpl,
         env,
         signal: controller.signal,
+        modelTimeoutMs,
         onStage: (stage) => { requestStage = stage; },
         requestBody: JSON.stringify({
           contents: [{

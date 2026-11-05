@@ -684,6 +684,49 @@ describe('Gemini routes', () => {
     expect(geminiSignal.aborted).toBe(false);
   });
 
+  it('tries another available Flash model when generation times out', async () => {
+    const fetchImpl = jest.fn(async (url, options) => {
+      if (String(url).includes('identitytoolkit.googleapis.com')) {
+        return makeResponse({ users: [{ localId: 'firebase-user' }] });
+      }
+      if (String(url).includes('models/gemini-2.5-flash:')) {
+        return new Promise((resolve, reject) => {
+          options.signal.addEventListener('abort', () => {
+            const error = new Error('aborted');
+            error.name = 'AbortError';
+            reject(error);
+          }, { once: true });
+        });
+      }
+      return makeResponse({
+        candidates: [{
+          content: {
+            parts: [{
+              text: JSON.stringify({
+                title: 'Quiet Evening',
+                intro: 'A gentle set.',
+                trackId: 'track-1',
+              }),
+            }],
+          },
+        }],
+      });
+    });
+    server = await startServer(fetchImpl, TEST_ENV, { modelTimeoutMs: 5 });
+
+    const response = await request(server, {
+      path: '/dj-set',
+      body: {
+        prompt: 'calm evening',
+        tracks: [{ id: 'track-1', title: 'Quiet Song', artist: 'A Singer' }],
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(String(fetchImpl.mock.calls[2][0])).toContain('models/gemini-2.0-flash:generateContent');
+  });
+
   it('returns a clear timeout response when Gemini exceeds its request deadline', async () => {
     const fetchImpl = jest.fn(async (url, options) => {
       if (String(url).includes('identitytoolkit.googleapis.com')) {
@@ -708,6 +751,6 @@ describe('Gemini routes', () => {
     });
 
     expect(response.status).toBe(504);
-    expect(response.body.error).toMatch(/response generation timed out/i);
+    expect(response.body.error).toMatch(/response generation with gemini-2.5-flash timed out/i);
   });
 });
