@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACE, RADIUS } from '../../constants/theme';
+import AppIcon from '../icons/AppIcon';
 
 const SettingsModal = ({
   visible,
@@ -71,7 +72,7 @@ const SettingsModal = ({
             accessibilityRole="button"
             accessibilityLabel="Close settings"
           >
-            <Text style={styles.backIcon}>‹</Text>
+            <AppIcon name="back" size={28} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Settings and privacy</Text>
           <View style={styles.headerButton} />

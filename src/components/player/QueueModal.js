@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import audioPlayer from '../../services/audioPlayer';
 import { getArtworkSource } from '../../utils/artworkHelper';
+import AppIcon from '../icons/AppIcon';
 
 export default function QueueModal({ visible, onClose }) {
   const [queue, setQueue] = useState([]);
@@ -78,8 +79,10 @@ export default function QueueModal({ visible, onClose }) {
           <TouchableOpacity
             onPress={() => handleRemoveTrack(queueIndex)}
             style={styles.removeBtn}
+            accessibilityRole="button"
+            accessibilityLabel={`Remove ${item.title || 'track'} from queue`}
           >
-            <Text style={styles.removeIcon}>✕</Text>
+            <AppIcon name="close" size={22} color="#B3B3B3" />
           </TouchableOpacity>
         )}
       </View>
@@ -101,8 +104,8 @@ export default function QueueModal({ visible, onClose }) {
       <SafeAreaView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Text style={styles.closeBtnText}>✕</Text>
+          <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Close queue">
+            <AppIcon name="close" size={26} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Queue</Text>
           {upcomingQueue.length > 0 ? (

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACE } from '../../constants/theme';
+import AppIcon from '../icons/AppIcon';
 
 const DRAWER_WIDTH = Math.min(Dimensions.get('window').width * 0.9, 430);
 
@@ -53,9 +54,9 @@ const ProfileDrawer = ({
   }, [visible, slideAnim, fadeAnim]);
 
   const items = [
-    { key: 'recents', icon: '◷', label: 'Recents', onPress: onOpenRecents },
-    { key: 'stats', icon: '▥', label: 'Listening stats', onPress: onOpenStats },
-    { key: 'settings', icon: '⚙', label: 'Settings and privacy', onPress: onOpenSettings },
+    { key: 'recents', icon: 'history', label: 'Recents', onPress: onOpenRecents },
+    { key: 'stats', icon: 'stats', label: 'Listening stats', onPress: onOpenStats },
+    { key: 'settings', icon: 'settings', label: 'Settings and privacy', onPress: onOpenSettings },
   ];
 
   return (
@@ -115,7 +116,9 @@ const ProfileDrawer = ({
                 activeOpacity={0.7}
                 accessibilityRole="button"
               >
-                <Text style={styles.menuIcon}>{item.icon}</Text>
+                <View style={styles.menuIconSlot}>
+                  <AppIcon name={item.icon} size={24} color="#FFFFFF" />
+                </View>
                 <Text style={styles.menuLabel}>{item.label}</Text>
                 {item.badge ? (
                   <View style={styles.badge}>
@@ -145,6 +148,7 @@ const ProfileDrawer = ({
 };
 
 const styles = StyleSheet.create({
+  menuIconSlot: { width: 36 },
   overlay: {
     flex: 1,
     flexDirection: 'row',

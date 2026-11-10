@@ -9,6 +9,7 @@ import {
 import { COLORS, SPACE, RADIUS } from '../../constants/theme';
 import { useMusic } from '../../context/MusicContext';
 import CreatePlaylistModal from './CreatePlaylistModal';
+import AppIcon from '../icons/AppIcon';
 
 export const LibraryView = ({ onOpenPlaylist }) => {
     const { playlists } = useMusic();
@@ -42,7 +43,7 @@ export const LibraryView = ({ onOpenPlaylist }) => {
                                     {pl.type} • {count} {count === 1 ? 'song' : 'songs'}
                                 </Text>
                             </View>
-                            <Text style={styles.chevron}>›</Text>
+                            <AppIcon name="forward" size={24} color="#B3B3B3" />
                         </TouchableOpacity>
                     );
                 })}
@@ -61,7 +62,7 @@ export const CreateView = ({ onOpenPlaylist, onSwitchToLibrary, userProfile }) =
             id: 'c1',
             title: 'Playlist',
             desc: 'Build a playlist with songs or episodes',
-            icon: '🎶',
+            icon: 'playlistAdd',
             action: () => setIsCreateModalOpen(true),
         },
     ];
@@ -90,13 +91,13 @@ export const CreateView = ({ onOpenPlaylist, onSwitchToLibrary, userProfile }) =
                             onPress={opt.action}
                         >
                             <View style={styles.createIconBox}>
-                                <Text style={styles.createEmoji}>{opt.icon}</Text>
+                                <AppIcon name={opt.icon} size={30} color="#FFFFFF" />
                             </View>
                             <View style={styles.createTextContainer}>
                                 <Text style={styles.createCardTitle}>{opt.title}</Text>
                                 <Text style={styles.createCardDesc}>{opt.desc}</Text>
                             </View>
-                            <Text style={styles.createPlus}>+</Text>
+                            <AppIcon name="add" size={24} color="#FFFFFF" />
                         </TouchableOpacity>
                     ))}
                 </View>

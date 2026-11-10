@@ -1,4 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import AppIcon from '../icons/AppIcon';
+import PrimaryButton from '../buttons/PrimaryButton';
+import SecondaryButton from '../buttons/SecondaryButton';
 import {
   ActivityIndicator,
   Linking,
@@ -46,6 +49,7 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
   }, [checkStatus]);
 
   const buildSet = async () => {
+    if (isLoading) return;
     setError('');
     setDjSet(null);
     setSetTracks([]);
@@ -101,7 +105,7 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
     <View style={styles.container}>
       <View style={styles.headingRow}>
         <View style={styles.iconCircle}>
-          <Text style={styles.icon}>♫</Text>
+          <AppIcon name="music" size={24} color="#FFFFFF" />
         </View>
         <View style={styles.headingCopy}>
           <Text style={styles.eyebrow}>POWERED BY GEMINI</Text>
@@ -132,33 +136,26 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
             placeholderTextColor="#727272"
             maxLength={500}
             returnKeyType="go"
-            onSubmitEditing={buildSet}
+            onSubmitEditing={isLoading ? undefined : buildSet}
             accessibilityLabel="Describe the music you want your AI DJ to pick"
           />
-          <TouchableOpacity
-            style={[styles.buildButton, isLoading && styles.disabledButton]}
+          <PrimaryButton
+            label={djSet ? 'Pick another track' : 'Pick my track'}
+            style={styles.primaryAction}
+            seedColor="#8E24AA"
             onPress={buildSet}
-            disabled={isLoading}
-            accessibilityRole="button"
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.buildButtonText}>{djSet ? 'Pick another track' : 'Pick my track'}</Text>
-            )}
-          </TouchableOpacity>
+            loading={isLoading}
+          />
         </>
       ) : (
         <View style={styles.setupRow}>
           <Text style={styles.setupText}>{statusMessage}</Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={checkStatus}
-            accessibilityRole="button"
+          <SecondaryButton
+            label="Retry"
             accessibilityLabel="Retry AI DJ connection"
-          >
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
+            style={styles.retryAction}
+            onPress={checkStatus}
+          />
         </View>
       )}
       {!!error && <Text style={styles.error}>{error}</Text>}
@@ -188,7 +185,7 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
           <Text style={styles.setTitle}>{djSet.title}</Text>
           {!!djSet.intro && <Text style={styles.intro}>{djSet.intro}</Text>}
           <View style={styles.trackRow}>
-            <Text style={styles.trackNumber}>▶</Text>
+            <AppIcon name="play" size={20} color="#1DB954" />
             <View style={styles.trackMeta}>
               <Text style={styles.trackTitle} numberOfLines={1}>{setTracks[0]?.title}</Text>
               <Text style={styles.artist} numberOfLines={1}>{setTracks[0]?.artist}</Text>
@@ -200,7 +197,7 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
             accessibilityRole="button"
             accessibilityLabel={`Play ${setTracks[0]?.title}`}
           >
-            <Text style={styles.startButtonText}>▶  Play pick & randomized queue</Text>
+            <Text style={styles.startButtonText}>Play pick & randomized queue</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -209,6 +206,8 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
 };
 
 const styles = StyleSheet.create({
+  primaryAction: { marginTop: 10 },
+  retryAction: { marginTop: 0 },
   container: {
     marginBottom: 20,
     padding: 16,

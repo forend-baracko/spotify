@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import AppIcon from '../icons/AppIcon';
 import {
   Alert,
   Modal,
@@ -76,7 +77,7 @@ const UserStatsModal = ({ visible, onClose, userProfile, user, recentTracks = []
             accessibilityRole="button"
             accessibilityLabel="Close listening stats"
           >
-            <Text style={styles.backIcon}>‹</Text>
+            <AppIcon name="back" size={28} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Listening stats</Text>
           <TouchableOpacity
@@ -85,7 +86,7 @@ const UserStatsModal = ({ visible, onClose, userProfile, user, recentTracks = []
             accessibilityRole="button"
             accessibilityLabel="Share listening stats"
           >
-            <Text style={styles.shareIcon}>↗</Text>
+            <AppIcon name="share" size={24} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
 

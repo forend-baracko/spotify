@@ -21,6 +21,7 @@ import { MOCK_TRACKS } from '../services/audiomackService';
 import { searchAudiusTracks } from '../services/audiusService';
 import { getArtworkSource } from '../utils/artworkHelper';
 import BottomNavBar, { TABS } from '../components/navigation/BottomNavBar';
+import AppIcon from '../components/icons/AppIcon';
 import GeminiDJ from '../components/search/GeminiDJ';
 import { CreateView, LibraryView } from '../components/playlists/LibraryAndCreateViews';
 import PlaylistDetailModal from '../components/playlists/PlaylistDetailModal';
@@ -477,7 +478,7 @@ const HomeScreen = ({ navigation }) => {
             </View>
 
             <View style={styles.whiteSearchBar}>
-              <Text style={styles.searchIconDark}>🔍</Text>
+              <AppIcon name="search" size={22} color="#121212" />
               <TextInput
                 style={styles.whiteSearchInput}
                 placeholder="What do you want to listen to?"
@@ -493,7 +494,7 @@ const HomeScreen = ({ navigation }) => {
                   onPress={() => setSearchQuery('')}
                   accessibilityLabel="Clear search"
                 >
-                  <Text style={styles.searchClearTextDark}>×</Text>
+                  <AppIcon name="close" size={22} color="#121212" />
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -508,7 +509,8 @@ const HomeScreen = ({ navigation }) => {
                   style={styles.changeCategoryButton}
                   onPress={() => setSearchCategory(null)}
                 >
-                  <Text style={styles.changeCategoryText}>‹ Categories</Text>
+                  <AppIcon name="back" size={20} color="#1ED760" />
+                  <Text style={styles.changeCategoryText}>Categories</Text>
                 </TouchableOpacity>
                 {featuredSections.map((section) => (
                   <View key={section.id} style={styles.homeFeaturedSection}>
@@ -537,7 +539,8 @@ const HomeScreen = ({ navigation }) => {
                     style={styles.changeCategoryButton}
                     onPress={() => setSearchCategory(null)}
                   >
-                    <Text style={styles.changeCategoryText}>‹ Categories</Text>
+                    <AppIcon name="back" size={20} color="#1ED760" />
+                  <Text style={styles.changeCategoryText}>Categories</Text>
                   </TouchableOpacity>
                 )}
                 <Text style={styles.searchResultsHeading}>Songs</Text>
@@ -575,7 +578,7 @@ const HomeScreen = ({ navigation }) => {
                         accessibilityLabel={`More options for ${track.title}`}
                         hitSlop={8}
                       >
-                        <Text style={styles.songMoreIcon}>•••</Text>
+                        <AppIcon name="more" size={22} color="#B3B3B3" />
                       </TouchableOpacity>
                     </View>
                   );
@@ -689,7 +692,7 @@ const HomeScreen = ({ navigation }) => {
               accessibilityRole="search"
               accessibilityLabel={searchQuery || 'Search songs or artists'}
             >
-              <Text style={styles.searchIcon}>🔍</Text>
+              <AppIcon name="search" size={22} color="#B3B3B3" />
               <Text style={styles.homeSearchPlaceholder} numberOfLines={1}>
                 {searchQuery || 'Search songs or artists...'}
               </Text>
@@ -702,7 +705,7 @@ const HomeScreen = ({ navigation }) => {
                   }}
                   accessibilityLabel="Clear search"
                 >
-                  <Text style={styles.searchClearText}>×</Text>
+                  <AppIcon name="close" size={22} color="#B3B3B3" />
                 </TouchableOpacity>
               ) : null}
             </TouchableOpacity>
@@ -824,7 +827,7 @@ const HomeScreen = ({ navigation }) => {
           />
           <View style={styles.homeSearchPanel}>
             <View style={styles.searchBarContainer}>
-              <Text style={styles.searchIcon}>🔍</Text>
+              <AppIcon name="search" size={22} color="#B3B3B3" />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search songs or artists..."
@@ -840,7 +843,7 @@ const HomeScreen = ({ navigation }) => {
                 onPress={closeHomeSearch}
                 accessibilityLabel="Cancel search"
               >
-                <Text style={styles.searchClearText}>×</Text>
+                <AppIcon name="close" size={22} color="#B3B3B3" />
               </TouchableOpacity>
             </View>
             {searchQuery.trim() ? (
@@ -882,6 +885,8 @@ const HomeScreen = ({ navigation }) => {
       <PlaylistDetailModal
         visible={!!selectedPlaylist}
         playlist={selectedPlaylist}
+        availableTracks={musicCatalog}
+        onAddSuggestedTrack={musicContext.addTrackToPlaylist}
         onClose={() => setSelectedPlaylistId(null)}
         onPlayTrack={(track) =>
           handlePlayTrack(track, selectedPlaylist?.tracks?.length ? selectedPlaylist.tracks : musicCatalog)
@@ -921,10 +926,12 @@ const HomeScreen = ({ navigation }) => {
               <TouchableOpacity
                 onPress={() => setIsPlayerModalOpen(false)}
                 style={styles.headerBtnLeft}
+                accessibilityRole="button"
+                accessibilityLabel="Close player"
                 activeOpacity={0.6}
                 hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
               >
-                <Text style={styles.headerChevron}>⌵</Text>
+                <AppIcon name="collapse" size={28} color="#FFFFFF" />
               </TouchableOpacity>
 
               <Text style={styles.headerTitleText}>Playing Song</Text>
@@ -934,7 +941,7 @@ const HomeScreen = ({ navigation }) => {
                 activeOpacity={0.6}
                 hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
               >
-                <Text style={styles.headerDots}>•••</Text>
+                <AppIcon name="more" size={24} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
 
@@ -960,11 +967,13 @@ const HomeScreen = ({ navigation }) => {
               <TouchableOpacity
                 onPress={() => currentTrack && musicContext.toggleLikeTrack(currentTrack)}
                 style={styles.addCircleBtn}
+                accessibilityRole="button"
+                accessibilityLabel={isLiked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}
+                accessibilityState={{ selected: isLiked }}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Text style={[styles.addCircleIcon, isLiked && styles.likedHeartActive]}>
-                  {isLiked ? '♥' : '♡'}
-                </Text>
+                <AppIcon name="favorite" size={28} color={isLiked ? '#1DB954' : '#FFFFFF'} />
+                {isLiked && <View style={styles.activeIconIndicator} />}
               </TouchableOpacity>
             </View>
 
@@ -999,34 +1008,35 @@ const HomeScreen = ({ navigation }) => {
                 style={styles.controlTouchArea}
                 accessibilityRole="button"
                 accessibilityLabel={isShuffle ? 'Turn shuffle off' : 'Turn shuffle on'}
+                accessibilityState={{ selected: isShuffle }}
               >
-                <Text
-                  style={[styles.secondaryControl, isShuffle && styles.activeControlState]}
-                >
-                  🔀
-                </Text>
+                <AppIcon name="shuffle" size={26} color={isShuffle ? '#1DB954' : '#B3B3B3'} />
+                {isShuffle && <View style={styles.activeIconIndicator} />}
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={handlePlayPrevious} style={styles.controlTouchArea}>
-                <Text style={styles.prevNextControl}>⏮</Text>
+              <TouchableOpacity onPress={handlePlayPrevious} style={styles.controlTouchArea} accessibilityRole="button" accessibilityLabel="Previous song">
+                <AppIcon name="previous" size={34} color="#FFFFFF" />
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.playCircleButton}
                 onPress={handleTogglePlay}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={isPlaying ? 'Pause song' : 'Play song'}
               >
-                <Text style={styles.playCircleIcon}>{isPlaying ? '❚❚' : '▶'}</Text>
+                <AppIcon name={isPlaying ? 'pause' : 'play'} size={36} color="#000000" />
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={handlePlayNext} style={styles.controlTouchArea}>
-                <Text style={styles.prevNextControl}>⏭</Text>
+              <TouchableOpacity onPress={handlePlayNext} style={styles.controlTouchArea} accessibilityRole="button" accessibilityLabel="Next song">
+                <AppIcon name="next" size={34} color="#FFFFFF" />
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={handleToggleRepeat}
                 style={styles.controlTouchArea}
                 accessibilityRole="button"
+                accessibilityState={{ selected: repeatMode !== REPEAT_MODE.OFF }}
                 accessibilityLabel={
                   repeatMode === REPEAT_MODE.ONE
                     ? 'Repeat current song'
@@ -1035,20 +1045,14 @@ const HomeScreen = ({ navigation }) => {
                       : 'Repeat off'
                 }
               >
-                <Text
-                  style={[
-                    styles.secondaryControl,
-                    repeatMode !== (REPEAT_MODE?.OFF || 'OFF') && styles.activeControlState,
-                  ]}
-                >
-                  {repeatMode === (REPEAT_MODE?.ONE || 'ONE') ? '🔂' : '🔁'}
-                </Text>
+                <AppIcon name={repeatMode === REPEAT_MODE.ONE ? 'repeatOne' : 'repeat'} size={26} color={repeatMode !== REPEAT_MODE.OFF ? '#1DB954' : '#B3B3B3'} />
+                {repeatMode !== REPEAT_MODE.OFF && <View style={styles.activeIconIndicator} />}
               </TouchableOpacity>
             </View>
 
             <View style={styles.actionBarRow}>
               <TouchableOpacity style={styles.actionIconBtn}>
-                <Text style={styles.actionIconSymbol}>📱</Text>
+                <AppIcon name="devices" size={22} color="#FFFFFF" />
               </TouchableOpacity>
 
               <View style={styles.fromBadge}>
@@ -1062,7 +1066,7 @@ const HomeScreen = ({ navigation }) => {
 
               <View style={styles.actionRightGroup}>
                 <TouchableOpacity style={styles.actionIconBtn}>
-                  <Text style={styles.actionIconSymbol}>⬆</Text>
+                  <AppIcon name="share" size={22} color="#FFFFFF" />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.actionIconBtn}
@@ -1071,7 +1075,7 @@ const HomeScreen = ({ navigation }) => {
                   accessibilityLabel="Open playback queue"
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <Text style={styles.actionIconSymbol}>≡</Text>
+                  <AppIcon name="queue" size={24} color="#FFFFFF" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -1193,6 +1197,15 @@ const HomeScreen = ({ navigation }) => {
 export default HomeScreen;
 
 const styles = StyleSheet.create({
+  activeIconIndicator: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#1DB954',
+    position: 'absolute',
+    bottom: 0,
+    alignSelf: 'center',
+  },
   container: {
     flex: 1,
     backgroundColor: '#121212',
@@ -1341,6 +1354,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   changeCategoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     alignSelf: 'flex-start',
     paddingVertical: 8,
     paddingHorizontal: 4,

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { COLORS, SPACE } from '../../constants/theme';
 import audioPlayer from '../../services/audioPlayer';
 import { getArtworkSource } from '../../utils/artworkHelper';
+import AppIcon from '../icons/AppIcon';
 
 export const TABS = {
   HOME: 'Home',
@@ -47,10 +48,10 @@ const BottomNavBar = ({ activeTab, onSelectTab, onOpenPlayer, isCreateModalOpen 
   }, []);
 
   const tabs = [
-    { id: TABS.HOME, label: 'Home', icon: '🏠' },
-    { id: TABS.SEARCH, label: 'Search', icon: '🔍' },
-    { id: TABS.LIBRARY, label: 'Your Library', icon: '❙❙❚' },
-    { id: TABS.CREATE, label: 'Create', icon: isCreateModalOpen ? '✕' : '➕' },
+    { id: TABS.HOME, label: 'Home', icon: 'home' },
+    { id: TABS.SEARCH, label: 'Search', icon: 'search' },
+    { id: TABS.LIBRARY, label: 'Your Library', icon: 'library' },
+    { id: TABS.CREATE, label: 'Create', icon: 'add' },
   ];
 
   const handleTogglePlay = (e) => {
@@ -83,6 +84,8 @@ const BottomNavBar = ({ activeTab, onSelectTab, onOpenPlayer, isCreateModalOpen 
           style={styles.miniPlayerContainer}
           activeOpacity={0.85}
           onPress={handleOpenPlayerModal}
+          accessibilityRole="button"
+          accessibilityLabel={`Open current track: ${currentTrack.title || 'Unknown Track'} by ${currentTrack.artist || 'Unknown Artist'}`}
         >
           {artworkSource ? (
             <Image source={artworkSource} style={styles.artwork} />
@@ -106,8 +109,10 @@ const BottomNavBar = ({ activeTab, onSelectTab, onOpenPlayer, isCreateModalOpen 
             onPress={handleTogglePlay}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
           >
-            <Text style={styles.playIcon}>{isPlaying ? '⏸' : '▶'}</Text>
+            <AppIcon name={isPlaying ? 'pause' : 'play'} size={20} color="#FFFFFF" />
           </TouchableOpacity>
 
           <View style={styles.progressBarBackground} pointerEvents="none">
@@ -132,17 +137,22 @@ const BottomNavBar = ({ activeTab, onSelectTab, onOpenPlayer, isCreateModalOpen 
               key={tab.id}
               style={styles.tabButton}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={isCreateModalOpen && isCreateBtn ? 'Close Create' : tab.label}
+              accessibilityState={{ selected: isActive }}
               onPress={() => onSelectTab && onSelectTab(tab.id)}
             >
               {isCreateModalOpen && isCreateBtn ? (
                 <View style={styles.closeCircle}>
-                  <Text style={styles.closeIcon}>✕</Text>
+                  <AppIcon name="close" size={16} color="#000000" />
                 </View>
               ) : (
                 <>
-                  <Text style={[styles.tabIcon, isActive && styles.activeTabIcon]}>
-                    {tab.icon}
-                  </Text>
+                  <AppIcon
+                    name={tab.icon}
+                    size={20}
+                    color={isActive ? '#FFFFFF' : '#B3B3B3'}
+                  />
                   <Text
                     style={[styles.tabLabel, isActive && styles.activeTabLabel]}
                     numberOfLines={1}
@@ -243,14 +253,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 6,
   },
-  tabIcon: {
-    fontSize: 18,
-    marginBottom: 3,
-    color: '#B3B3B3',
-  },
-  activeTabIcon: {
-    color: '#FFFFFF',
-  },
   tabLabel: {
     color: '#B3B3B3',
     fontSize: 10,
@@ -267,11 +269,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  closeIcon: {
-    color: '#000000',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
 });
 

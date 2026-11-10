@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { COLORS, SPACE, RADIUS } from '../../constants/theme';
 import { getArtworkSource } from '../../utils/artworkHelper';
+import AppIcon from '../icons/AppIcon';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -112,7 +113,7 @@ const SwipeableTrackRow = ({
                         resetPosition();
                     }}
                 >
-                    <Text style={styles.actionIcon}>⤹</Text>
+                    <AppIcon name="queue" size={24} color="#FFFFFF" />
                     <Text style={styles.actionLabel}>Queue</Text>
                 </TouchableOpacity>
             </View>
@@ -129,7 +130,7 @@ const SwipeableTrackRow = ({
                         });
                     }}
                 >
-                    <Text style={styles.actionIcon}>➕🎵</Text>
+                    <AppIcon name="playlistAdd" size={24} color="#FFFFFF" />
                     <Text style={styles.actionLabel}>Playlist</Text>
                 </TouchableOpacity>
 
@@ -143,7 +144,7 @@ const SwipeableTrackRow = ({
                         });
                     }}
                 >
-                    <Text style={styles.actionIcon}>{isLiked ? '💚' : '♡'}</Text>
+                    <AppIcon name="favorite" size={24} color="#FFFFFF" />
                     <Text style={styles.actionLabel}>{isLiked ? 'Liked' : 'Favorite'}</Text>
                 </TouchableOpacity>
             </View>
@@ -160,6 +161,9 @@ const SwipeableTrackRow = ({
                 <TouchableOpacity
                     style={styles.contentRow}
                     activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Play ${track.title || 'Unknown Track'} by ${track.artist || 'Unknown Artist'}${isLiked ? ', liked' : ''}`}
+                    accessibilityState={{ selected: isSelected }}
                     onPress={() => {
                         if (currentPanX.current !== 0) {
                             resetPosition();
@@ -173,7 +177,7 @@ const SwipeableTrackRow = ({
                         <Image source={getArtworkSource(track.artwork)} style={styles.artwork} />
                         {isSelected && (
                             <View style={styles.playingIndicator}>
-                                <Text style={styles.playingNote}>♪</Text>
+                                <AppIcon name="music" size={16} color="#1DB954" />
                             </View>
                         )}
                     </View>
@@ -187,7 +191,7 @@ const SwipeableTrackRow = ({
                             {track.title}
                         </Text>
                         <View style={styles.artistRow}>
-                            {isLiked && <Text style={styles.likedDot}>💚 </Text>}
+                            {isLiked && <AppIcon name="favorite" size={12} color="#1DB954" />}
                             <Text style={styles.artist} numberOfLines={1}>
                                 {track.artist}
                             </Text>
@@ -197,13 +201,15 @@ const SwipeableTrackRow = ({
                     {/* Three-Dot (⋯) Button instead of duration & plays */}
                     <TouchableOpacity
                         style={styles.moreButton}
+                        accessibilityRole="button"
+                        accessibilityLabel={`More options for ${track.title}`}
                         activeOpacity={0.6}
                         onPress={() => {
                             if (onOpenMenu) onOpenMenu(track);
                         }}
                         hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
                     >
-                        <Text style={styles.moreDotsText}>•••</Text>
+                        <AppIcon name="more" size={22} color="#B3B3B3" />
                     </TouchableOpacity>
                 </TouchableOpacity>
             </Animated.View>

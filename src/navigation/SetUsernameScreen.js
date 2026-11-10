@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import AppIcon from '../components/icons/AppIcon';
 import {
     View,
     Text,
     TextInput,
     TouchableOpacity,
     StyleSheet,
-    ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACE, RADIUS } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
+import PrimaryButton from '../components/buttons/PrimaryButton';
 
 const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,30}$/;
 
@@ -23,6 +24,7 @@ const SetUsernameScreen = ({ navigation }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [localError, setLocalError] = useState('');
     const [isFocused, setIsFocused] = useState(false);
+    const inFlight = useRef(false);
 
     // If username is already saved in Firebase / local profile, redirect to Home
     useEffect(() => {
@@ -55,6 +57,7 @@ const SetUsernameScreen = ({ navigation }) => {
     const validationMessage = getValidationMessage();
 
     const handleSubmit = async () => {
+        if (inFlight.current) return;
         setLocalError('');
 
         if (!trimmedUsername) {
@@ -67,6 +70,7 @@ const SetUsernameScreen = ({ navigation }) => {
             return;
         }
 
+        inFlight.current = true;
         setIsSubmitting(true);
         try {
             await saveUsername(trimmedUsername);
@@ -78,6 +82,7 @@ const SetUsernameScreen = ({ navigation }) => {
         } catch (error) {
             setLocalError(error.message || 'Failed to save username. Please try again.');
         } finally {
+            inFlight.current = false;
             setIsSubmitting(false);
         }
     };
@@ -159,10 +164,10 @@ const SetUsernameScreen = ({ navigation }) => {
                                 autoCorrect={false}
                                 maxLength={30}
                                 returnKeyType="done"
-                                onSubmitEditing={handleSubmit}
+                                onSubmitEditing={isSubmitting ? undefined : handleSubmit}
                             />
                             {isValidFormat && (
-                                <Text style={styles.checkMark}>✓</Text>
+                                <AppIcon name="check" size={20} color="#1DB954" />
                             )}
                         </View>
 
@@ -181,21 +186,7 @@ const SetUsernameScreen = ({ navigation }) => {
                         </View>
 
                         {/* Save Button */}
-                        <TouchableOpacity
-                            style={[
-                                styles.continueButton,
-                                (!isValidFormat || isSubmitting) && styles.disabledButton,
-                            ]}
-                            onPress={handleSubmit}
-                            disabled={!isValidFormat || isSubmitting}
-                            activeOpacity={0.8}
-                        >
-                            {isSubmitting ? (
-                                <ActivityIndicator color={COLORS.black} />
-                            ) : (
-                                <Text style={styles.continueButtonText}>Finish Setup</Text>
-                            )}
-                        </TouchableOpacity>
+                        <PrimaryButton label="Finish Setup" onPress={handleSubmit} disabled={!isValidFormat} loading={isSubmitting} />
                     </View>
 
                     {/* Footer Info */}

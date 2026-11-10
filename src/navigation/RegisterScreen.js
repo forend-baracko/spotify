@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
     View,
     Text,
@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACE, RADIUS } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
+import PrimaryButton from '../components/buttons/PrimaryButton';
 
 const RegisterScreen = ({ navigation }) => {
     const { register, loginGoogle, isConfigured } = useAuth();
@@ -24,8 +25,10 @@ const RegisterScreen = ({ navigation }) => {
     const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
     const [localError, setLocalError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const inFlight = useRef(false);
 
     const handleRegister = async () => {
+        if (inFlight.current) return;
         setLocalError('');
 
         if (!email.trim() || !password) {
@@ -49,17 +52,21 @@ const RegisterScreen = ({ navigation }) => {
             return;
         }
 
+        inFlight.current = true;
         setIsSubmitting(true);
         try {
             await register(email, password);
         } catch (error) {
             setLocalError(error.message || 'Failed to create account.');
         } finally {
+            inFlight.current = false;
             setIsSubmitting(false);
         }
     };
 
     const handleGoogleSignUp = async () => {
+        if (inFlight.current) return;
+        inFlight.current = true;
         setLocalError('');
         setIsGoogleSubmitting(true);
         try {
@@ -67,6 +74,7 @@ const RegisterScreen = ({ navigation }) => {
         } catch (error) {
             setLocalError(error.message || 'Google sign-in failed.');
         } finally {
+            inFlight.current = false;
             setIsGoogleSubmitting(false);
         }
     };
@@ -164,21 +172,7 @@ const RegisterScreen = ({ navigation }) => {
                         />
 
                         {/* Submit Button */}
-                        <TouchableOpacity
-                            style={[
-                                styles.registerButton,
-                                (isSubmitting || isGoogleSubmitting) && styles.disabledButton,
-                            ]}
-                            onPress={handleRegister}
-                            disabled={isSubmitting || isGoogleSubmitting}
-                            activeOpacity={0.8}
-                        >
-                            {isSubmitting ? (
-                                <ActivityIndicator color={COLORS.black} />
-                            ) : (
-                                <Text style={styles.registerButtonText}>Create Account</Text>
-                            )}
-                        </TouchableOpacity>
+                        <PrimaryButton label="Create Account" onPress={handleRegister} disabled={isGoogleSubmitting} loading={isSubmitting} />
 
                         {/* Divider */}
                         <View style={styles.dividerRow}>

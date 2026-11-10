@@ -1,235 +1,203 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  Modal,
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Dimensions,
-  StatusBar,
-  Alert,
-  Image,
+  Alert, Image, Modal, ScrollView, StatusBar, StyleSheet,
+  Text, TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, SPACE, RADIUS } from '../../constants/theme';
 import { getArtworkSource } from '../../utils/artworkHelper';
 import SwipeableTrackRow from '../player/SwipeableTrackRow';
 import audioPlayer from '../../services/audioPlayer';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+import AppIcon from '../icons/AppIcon';
+import PlaylistButton from '../buttons/PlaylistButton';
+import SecondaryButton from '../buttons/SecondaryButton';
 
 const PlaylistDetailModal = ({
-  visible,
-  playlist,
-  onClose,
-  onPlayTrack,
-  currentTrack,
-  onOpenTrackMenu,
-  onAddToQueue,
-  onAddToPlaylist,
-  onToggleFavorite,
-  isLiked,
-  onDeletePlaylist,
-  userProfile,
-  onAttachProfile,
+  visible, playlist, onClose, onPlayTrack, currentTrack,
+  onOpenTrackMenu, onAddToQueue, onAddToPlaylist, onToggleFavorite,
+  isLiked, onDeletePlaylist, userProfile, onAttachProfile,
+  availableTracks = [], onAddSuggestedTrack,
 }) => {
   const insets = useSafeAreaInsets();
+  const [isPickingSongs, setIsPickingSongs] = useState(false);
+  const [pendingAdd, setPendingAdd] = useState(null);
+  const [addError, setAddError] = useState('');
+  const requestEpoch = useRef(0);
+  useEffect(() => {
+    requestEpoch.current += 1;
+    setIsPickingSongs(false);
+    setAddError('');
+    setPendingAdd(null);
+    return () => { requestEpoch.current += 1; };
+  }, [playlist?.id, visible]);
 
   if (!playlist) return null;
-
   const tracks = playlist.tracks || [];
+  // Default/liked collections retain their existing management behavior.
+  const canSuggest = !playlist.isDefault && typeof onAddSuggestedTrack === 'function';
+  const suggestions = canSuggest
+    ? availableTracks.filter((track) => !tracks.some((added) => added.id === track.id))
+    : [];
+  const visibleSuggestions = isPickingSongs ? suggestions : suggestions.slice(0, 6);
+  const creator = playlist.creator || userProfile;
+  const creatorName = playlist.creator?.username
+    ? `@${playlist.creator.username}`
+    : playlist.creator?.name || userProfile?.displayName || 'You';
+  const creatorPhoto = playlist.creator?.photoURL || userProfile?.photoURL;
 
   const handlePlayAll = () => {
     if (tracks.length === 0) {
       Alert.alert('Empty Playlist', 'Add some songs first to start playing!');
       return;
     }
-    // Queue the full playlist in order, starting from the first track
     audioPlayer.playPlaylist(tracks, 0);
   };
-
   const handleShuffle = () => {
     if (tracks.length === 0) return;
     const randomIndex = Math.floor(Math.random() * tracks.length);
-    // Use shuffle mode so upcoming tracks are shuffled
     audioPlayer.setQueueForTrack(tracks[randomIndex], tracks, true);
     audioPlayer.playTrack(tracks[randomIndex]);
   };
-
   const handleTrackPress = (track) => {
-    // Queue the playlist starting from this track, preserving order
     audioPlayer.setQueueForTrack(track, tracks, false);
     audioPlayer.playTrack(track);
-    // Notify parent so the player modal opens
     if (onPlayTrack) onPlayTrack(track);
+  };
+  const handlePlaylistOptions = () => {
+    Alert.alert(playlist.title, 'Playlist Options', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete Playlist', style: 'destructive', onPress: () => {
+        if (onDeletePlaylist) {
+          onDeletePlaylist(playlist.id);
+          onClose();
+        }
+      } },
+    ]);
+  };
+  const handleAddSuggestedTrack = async (track) => {
+    if (pendingAdd) return;
+    const epoch = requestEpoch.current;
+    setPendingAdd(track.id);
+    setAddError('');
+    try {
+      const added = await onAddSuggestedTrack(playlist.id, track);
+      if (added === false && epoch === requestEpoch.current) setAddError('Could not add song. Try again.');
+    } catch {
+      if (epoch === requestEpoch.current) setAddError('Could not add song. Try again.');
+    } finally {
+      if (epoch === requestEpoch.current) setPendingAdd(null);
+    }
   };
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#121212" />
-
-        {/* Top Navigation Bar */}
+        <View pointerEvents="none" style={styles.heroBackground} />
+        <StatusBar barStyle="light-content" backgroundColor="#484848" />
         <View style={styles.topNav}>
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={onClose}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Text style={styles.backIcon}>‹</Text>
+          <TouchableOpacity style={styles.backButton} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close playlist">
+            <AppIcon name="back" size={28} color="#FFFFFF" />
           </TouchableOpacity>
-
-          <Text style={styles.navTitle} numberOfLines={1}>
-            {playlist.title}
-          </Text>
-
-          {!playlist.isDefault ? (
-            <TouchableOpacity
-              style={styles.moreHeaderBtn}
-              onPress={() => {
-                Alert.alert(playlist.title, 'Playlist Options', [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Delete Playlist',
-                    style: 'destructive',
-                    onPress: () => {
-                      if (onDeletePlaylist) {
-                        onDeletePlaylist(playlist.id);
-                        onClose();
-                      }
-                    },
-                  },
-                ]);
-              }}
-            >
-              <Text style={styles.moreHeaderIcon}>•••</Text>
+          {!playlist.isDefault && (
+            <TouchableOpacity style={styles.iconButton} onPress={handlePlaylistOptions} accessibilityRole="button" accessibilityLabel="Playlist options">
+              <AppIcon name="more" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-          ) : (
-            <View style={{ width: 36 }} />
           )}
         </View>
-
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={{ paddingBottom: 120 }}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Hero Playlist Info Section */}
-          <View style={styles.heroSection}>
-            <View style={styles.artworkBox}>
-              {playlist.artwork || playlist.cover ? (
-                <Image
-                  source={getArtworkSource(playlist.artwork || playlist.cover)}
-                  style={styles.artworkImage}
-                />
-              ) : (
-                <Text style={styles.heroEmoji}>{playlist.icon || '🎶'}</Text>
-              )}
-            </View>
-
-            <Text style={styles.playlistName}>{playlist.title}</Text>
-            <Text style={styles.playlistDesc}>
-              {playlist.description || 'Playlist created by you'}
-            </Text>
-            <Text style={styles.playlistStats}>
-              {playlist.type ? `${playlist.type} • ` : ''}
-              {tracks.length} {tracks.length === 1 ? 'song' : 'songs'}
-            </Text>
-
-            {/* Creator Profile Row */}
-            {(playlist.creator || userProfile) && (
-              <View style={styles.creatorRow}>
-                {(playlist.creator?.photoURL || userProfile?.photoURL) ? (
-                  <Image
-                    source={{ uri: playlist.creator?.photoURL || userProfile?.photoURL }}
-                    style={styles.creatorAvatar}
-                  />
-                ) : (
-                  <View style={[styles.creatorAvatar, styles.creatorAvatarPlaceholder]}>
-                    <Text style={styles.creatorAvatarInitial}>
-                      {(playlist.creator?.name || userProfile?.displayName || 'U')[0].toUpperCase()}
-                    </Text>
+        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, 24) + 48 }]} showsVerticalScrollIndicator={false}>
+          <View style={styles.hero}>
+            <View style={styles.heroRow}>
+              <View style={styles.artworkBox}>
+                {playlist.artwork || playlist.cover ? (
+                  <Image source={getArtworkSource(playlist.artwork || playlist.cover)} style={styles.artwork} />
+                ) : <Text style={styles.artworkEmoji}>{playlist.icon || '🎶'}</Text>}
+              </View>
+              <View style={styles.heroDetails}>
+                <Text accessibilityRole="header" style={styles.title}>{playlist.title}</Text>
+                {creator && (
+                  <View style={styles.creatorRow}>
+                    {creatorPhoto ? <Image source={{ uri: creatorPhoto }} style={styles.avatar} /> : (
+                      <View style={[styles.avatar, styles.avatarFallback]}><Text style={styles.avatarInitial}>{creatorName[0].toUpperCase()}</Text></View>
+                    )}
+                    <Text style={styles.creatorName}>{creatorName}</Text>
                   </View>
                 )}
-                <Text style={styles.creatorName}>
-                  {playlist.creator?.username
-                    ? `@${playlist.creator.username}`
-                    : playlist.creator?.name || userProfile?.displayName || 'You'}
-                </Text>
+                <Text style={styles.description}>{playlist.description || 'Playlist created by you'}</Text>
+                <Text style={styles.stats}>{tracks.length} {tracks.length === 1 ? 'song' : 'songs'}</Text>
               </View>
-            )}
-
-            {/* Attach My Profile Button */}
+            </View>
             {userProfile && !playlist.isDefault && (
               <TouchableOpacity
-                style={styles.attachProfileBtn}
-                activeOpacity={0.8}
-                onPress={() => {
-                  if (onAttachProfile) onAttachProfile(playlist.id);
-                }}
+                style={styles.attachProfile} activeOpacity={0.8}
+                accessibilityRole="button" accessibilityLabel="Attach my profile to playlist"
+                onPress={() => { if (onAttachProfile) onAttachProfile(playlist.id); }}
               >
-                <Text style={styles.attachProfileIcon}>👤</Text>
-                <Text style={styles.attachProfileText}>
-                  {playlist.creator?.uid === userProfile?.uid
-                    ? 'Update My Profile'
-                    : 'Add My Profile to Playlist'}
-                </Text>
+                <AppIcon name="person" size={20} color="#FFFFFF" />
+                <Text style={styles.attachLabel}>{playlist.creator?.uid === userProfile?.uid ? 'Update My Profile' : 'Add My Profile to Playlist'}</Text>
               </TouchableOpacity>
             )}
-
-            {/* Play & Shuffle Control Buttons */}
-            <View style={styles.controlRow}>
-              <TouchableOpacity
-                style={styles.shuffleBtn}
-                activeOpacity={0.8}
-                onPress={handleShuffle}
-              >
-                <Text style={styles.shuffleIcon}>🔀</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.playBigBtn}
-                activeOpacity={0.8}
-                onPress={handlePlayAll}
-              >
-                <Text style={styles.playBigIcon}>▶</Text>
-              </TouchableOpacity>
-            </View>
+            {tracks.length > 0 && (
+              <View style={styles.controls}>
+                <TouchableOpacity style={styles.iconButton} onPress={handleShuffle} accessibilityRole="button" accessibilityLabel="Shuffle playlist">
+                  <AppIcon name="shuffle" size={28} color="#FFFFFF" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.playButton} onPress={handlePlayAll} accessibilityRole="button" accessibilityLabel="Play playlist">
+                  <AppIcon name="play" size={32} color="#000000" />
+                </TouchableOpacity>
+              </View>
+            )}
+            {suggestions.length > 0 && !isPickingSongs && (
+              <View style={styles.addSongsAction}>
+                <PlaylistButton neutral label="+ Add to this playlist" onPress={() => setIsPickingSongs(true)} />
+              </View>
+            )}
           </View>
-
-          {/* Tracks Header */}
-          <View style={styles.tracksHeader}>
-            <Text style={styles.sectionHeading}>Tracks</Text>
-            <Text style={styles.trackCounter}>{tracks.length} songs</Text>
-          </View>
-
-          {/* Tracks List */}
-          {tracks.length === 0 ? (
-            <View style={styles.emptyBox}>
+          {!isPickingSongs && tracks.length > 0 && (
+            <>
+              <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Tracks</Text><Text style={styles.source}>{tracks.length} songs</Text></View>
+              {tracks.map((track, index) => (
+                <SwipeableTrackRow
+                  key={`pl-track-${track.id}-${index}`} track={track} isSelected={currentTrack?.id === track.id}
+                  onPress={() => handleTrackPress(track)}
+                  onOpenMenu={() => onOpenTrackMenu && onOpenTrackMenu(track, playlist.id)}
+                  onAddToQueue={onAddToQueue} onAddToPlaylist={onAddToPlaylist}
+                  onToggleFavorite={onToggleFavorite} isLiked={isLiked && isLiked(track.id)} isInPlaylist
+                />
+              ))}
+            </>
+          )}
+          {!isPickingSongs && tracks.length === 0 && suggestions.length === 0 && (
+            <View style={styles.empty}>
               <Text style={styles.emptyTitle}>This playlist is empty</Text>
-              <Text style={styles.emptySubtitle}>
-                Swipe left on any song on the home screen or use the three-dot menu to add songs here!
-              </Text>
+              <Text style={styles.emptyDescription}>Swipe left on any song on the home screen or use the three-dot menu to add songs here!</Text>
             </View>
-          ) : (
-            tracks.map((track, idx) => (
-              <SwipeableTrackRow
-                key={`pl-track-${track.id}-${idx}`}
-                track={track}
-                isSelected={currentTrack?.id === track.id}
-                onPress={() => handleTrackPress(track)}
-                onOpenMenu={() =>
-                  onOpenTrackMenu && onOpenTrackMenu(track, playlist.id)
-                }
-                onAddToQueue={onAddToQueue}
-                onAddToPlaylist={onAddToPlaylist}
-                onToggleFavorite={onToggleFavorite}
-                isLiked={isLiked && isLiked(track.id)}
-                isInPlaylist={true}
-              />
-            ))
+          )}
+          {(suggestions.length > 0 || isPickingSongs) && (
+            <View style={styles.suggestions}>
+              <View style={styles.suggestionsHeader}>
+                <Text accessibilityRole="header" style={styles.suggestionsTitle}>{isPickingSongs ? 'Add songs' : 'Recommended songs'}</Text>
+                {isPickingSongs && <SecondaryButton label="Done" onPress={() => setIsPickingSongs(false)} style={styles.doneButton} />}
+              </View>
+              <Text style={styles.source}>From your music catalog</Text>
+              {addError ? <Text accessibilityRole="alert" style={styles.error}>{addError}</Text> : null}
+              {visibleSuggestions.map((track) => (
+                <View key={`suggestion-${track.id}`} style={styles.suggestionRow}>
+                  <Image source={getArtworkSource(track.artwork)} style={styles.suggestionArtwork} />
+                  <View style={styles.suggestionInfo}>
+                    <Text style={styles.suggestionTitle} numberOfLines={2}>{track.title}</Text>
+                    <Text style={styles.suggestionArtist} numberOfLines={1}>{track.artist}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.iconButton} accessibilityRole="button"
+                    accessibilityLabel={`Add ${track.title} to this playlist`}
+                    accessibilityState={{ disabled: !!pendingAdd, busy: pendingAdd === track.id }}
+                    disabled={!!pendingAdd} onPress={pendingAdd ? undefined : () => handleAddSuggestedTrack(track)}
+                  >
+                    <View style={styles.plusCircle}><AppIcon name={pendingAdd === track.id ? 'more' : 'add'} size={18} color="#D0D0D0" /></View>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {isPickingSongs && suggestions.length === 0 && <Text style={styles.source}>All catalog songs are already in this playlist.</Text>}
+            </View>
           )}
         </ScrollView>
       </View>
@@ -238,217 +206,48 @@ const PlaylistDetailModal = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#121212',
-  },
-  topNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACE?.md || 16,
-    paddingVertical: 10,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#222',
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  backIcon: {
-    color: COLORS?.textPrimary || '#FFF',
-    fontSize: 34,
-    fontWeight: '300',
-    lineHeight: 36,
-  },
-  navTitle: {
-    color: COLORS?.textPrimary || '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-    maxWidth: SCREEN_WIDTH * 0.65,
-  },
-  moreHeaderBtn: {
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  moreHeaderIcon: {
-    color: COLORS?.textSecondary || '#B3B3B3',
-    fontSize: 18,
-  },
-  scroll: {
-    flex: 1,
-  },
-  heroSection: {
-    alignItems: 'center',
-    paddingVertical: SPACE?.lg || 24,
-    paddingHorizontal: SPACE?.lg || 24,
-  },
-  artworkBox: {
-    width: 150,
-    height: 150,
-    borderRadius: 8,
-    backgroundColor: '#262626',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 8,
-    marginBottom: SPACE?.md || 16,
-  },
-  artworkImage: {
-    width: '100%',
-    height: '100%',
-  },
-  heroEmoji: {
-    fontSize: 64,
-  },
-  playlistName: {
-    color: COLORS?.textPrimary || '#FFF',
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 6,
-  },
-  playlistDesc: {
-    color: COLORS?.textSecondary || '#B3B3B3',
-    fontSize: 13,
-    textAlign: 'center',
-    marginBottom: 8,
-    paddingHorizontal: SPACE?.md || 16,
-  },
-  playlistStats: {
-    color: COLORS?.textMuted || '#777',
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: SPACE?.lg || 24,
-  },
-  controlRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  shuffleBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#282828',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACE?.lg || 24,
-  },
-  shuffleIcon: {
-    fontSize: 20,
-  },
-  playBigBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS?.primary || '#1DB954',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: COLORS?.primary || '#1DB954',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  playBigIcon: {
-    color: COLORS?.black || '#000',
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginLeft: 3,
-  },
-  tracksHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: SPACE?.lg || 24,
-    paddingVertical: SPACE?.sm || 8,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#222',
-  },
-  sectionHeading: {
-    color: COLORS?.textPrimary || '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  trackCounter: {
-    color: COLORS?.textMuted || '#777',
-    fontSize: 12,
-  },
-  emptyBox: {
-    alignItems: 'center',
-    paddingVertical: 50,
-    paddingHorizontal: SPACE?.xl || 32,
-  },
-  emptyTitle: {
-    color: COLORS?.textPrimary || '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    color: COLORS?.textSecondary || '#B3B3B3',
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  // Creator profile row styles
-  creatorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: -8,
-    marginBottom: 12,
-  },
-  creatorAvatar: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    marginRight: 8,
-    backgroundColor: '#333',
-  },
-  creatorAvatarPlaceholder: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#1DB954',
-  },
-  creatorAvatarInitial: {
-    color: '#000',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  creatorName: {
-    color: COLORS?.textSecondary || '#B3B3B3',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  attachProfileBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1E2A22',
-    borderWidth: 1,
-    borderColor: '#1DB954',
-    borderRadius: 20,
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    marginBottom: 14,
-  },
-  attachProfileIcon: {
-    fontSize: 14,
-    marginRight: 6,
-  },
-  attachProfileText: {
-    color: '#1DB954',
-    fontSize: 13,
-    fontWeight: '600',
-  },
+  container: { flex: 1, backgroundColor: '#121212' },
+  heroBackground: { position: 'absolute', top: 0, left: 0, right: 0, height: 380, backgroundImage: 'linear-gradient(180deg, #484848 0%, #121212 100%)' },
+  topNav: { minHeight: 64, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  backButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#242424', alignItems: 'center', justifyContent: 'center' },
+  iconButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+  scrollContent: { paddingTop: 12 },
+  hero: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24 },
+  heroRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  artworkBox: { width: 110, height: 110, borderRadius: 4, backgroundColor: '#3A3A3A', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  artwork: { width: '100%', height: '100%' },
+  artworkEmoji: { fontSize: 48 },
+  heroDetails: { flex: 1, minWidth: 0 },
+  title: { color: '#FFFFFF', fontSize: 24, fontWeight: '700', marginBottom: 12 },
+  creatorRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  avatar: { width: 24, height: 24, borderRadius: 12, marginRight: 8, backgroundColor: '#333333' },
+  avatarFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#1ED760' },
+  avatarInitial: { color: '#000000', fontWeight: '700', fontSize: 12 },
+  creatorName: { color: '#FFFFFF', fontSize: 13, flexShrink: 1 },
+  description: { color: '#C0C0C0', fontSize: 13, marginBottom: 6 },
+  stats: { color: '#B3B3B3', fontSize: 13 },
+  attachProfile: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, marginTop: 16 },
+  attachLabel: { color: '#D0D0D0', fontSize: 13, flexShrink: 1 },
+  controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 16, marginTop: 8 },
+  playButton: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#1ED760', alignItems: 'center', justifyContent: 'center' },
+  addSongsAction: { paddingTop: 24 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 8 },
+  sectionTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
+  empty: { padding: 32, alignItems: 'center' },
+  emptyTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginBottom: 8 },
+  emptyDescription: { color: '#B3B3B3', fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  suggestions: { paddingHorizontal: 20, paddingTop: 20 },
+  suggestionsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  suggestionsTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '700', flexShrink: 1 },
+  source: { color: '#B3B3B3', fontSize: 13, marginTop: 6, marginBottom: 12 },
+  doneButton: { marginTop: 0 },
+  error: { color: '#FFB4AB', fontSize: 14, marginBottom: 12 },
+  suggestionRow: { flexDirection: 'row', alignItems: 'center', minHeight: 76, paddingVertical: 8 },
+  suggestionArtwork: { width: 48, height: 48, borderRadius: 4, backgroundColor: '#303030' },
+  suggestionInfo: { flex: 1, paddingHorizontal: 12 },
+  suggestionTitle: { color: '#FFFFFF', fontSize: 16 },
+  suggestionArtist: { color: '#B3B3B3', fontSize: 13, marginTop: 4 },
+  plusCircle: { width: 24, height: 24, borderWidth: 1.5, borderColor: '#B3B3B3', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
 });
 
 export default PlaylistDetailModal;

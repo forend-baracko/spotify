@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import AppIcon from '../icons/AppIcon';
+import SecondaryButton from '../buttons/SecondaryButton';
+import PrimaryButton from '../buttons/PrimaryButton';
 import {
   Image,
   Modal,
@@ -62,7 +65,7 @@ const ProfileDetailsModal = ({ visible, onClose, user, userProfile, onSaveUserna
             accessibilityRole="button"
             accessibilityLabel="Close profile"
           >
-            <Text style={styles.closeIcon}>‹</Text>
+            <AppIcon name="back" size={28} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Profile</Text>
           <View style={styles.headerSpacer} />
@@ -96,26 +99,21 @@ const ProfileDetailsModal = ({ visible, onClose, user, userProfile, onSaveUserna
               />
               {usernameError ? <Text style={styles.usernameError}>{usernameError}</Text> : null}
               <View style={styles.usernameActions}>
-                <TouchableOpacity
+                <SecondaryButton
+                  label="Cancel"
                   onPress={() => {
                     setEditedUsername(username || '');
                     setUsernameError('');
                     setIsEditingUsername(false);
                   }}
                   disabled={isSavingUsername}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+                  style={styles.secondaryButton}
+                />
+                <PrimaryButton
+                  label="Save username"
                   onPress={handleSaveUsername}
-                  disabled={isSavingUsername}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.saveText}>
-                    {isSavingUsername ? 'Saving...' : 'Save username'}
-                  </Text>
-                </TouchableOpacity>
+                  loading={isSavingUsername}
+                />
               </View>
             </View>
           ) : (
@@ -142,6 +140,7 @@ const ProfileDetailsModal = ({ visible, onClose, user, userProfile, onSaveUserna
 };
 
 const styles = StyleSheet.create({
+  secondaryButton: { marginTop: 0 },
   container: {
     flex: 1,
     backgroundColor: '#121212',

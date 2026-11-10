@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACE, RADIUS } from '../../constants/theme';
 import { getArtworkSource } from '../../utils/artworkHelper';
 import CreatePlaylistModal from './CreatePlaylistModal';
+import SecondaryButton from '../buttons/SecondaryButton';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -67,9 +68,7 @@ const AddToPlaylistModal = ({
                     {/* Header */}
                     <View style={styles.header}>
                         <Text style={styles.title}>Add to playlist</Text>
-                        <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                            <Text style={styles.doneText}>Done</Text>
-                        </TouchableOpacity>
+                        <SecondaryButton label="Done" onPress={onClose} style={styles.secondaryButton} />
                     </View>
 
                     {/* Track Preview */}
@@ -160,6 +159,7 @@ const AddToPlaylistModal = ({
 };
 
 const styles = StyleSheet.create({
+    secondaryButton: { marginTop: 0 },
     overlay: {
         flex: 1,
         justifyContent: 'flex-end',

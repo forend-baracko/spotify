@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
     View,
     Text,
@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACE, RADIUS } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
+import PrimaryButton from '../components/buttons/PrimaryButton';
 
 const LoginScreen = ({ navigation }) => {
     const { login, loginGoogle, isConfigured } = useAuth();
@@ -23,8 +24,10 @@ const LoginScreen = ({ navigation }) => {
     const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
     const [localError, setLocalError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const inFlight = useRef(false);
 
     const handleLogin = async () => {
+        if (inFlight.current) return;
         setLocalError('');
 
         if (!email.trim() || !password) {
@@ -32,17 +35,21 @@ const LoginScreen = ({ navigation }) => {
             return;
         }
 
+        inFlight.current = true;
         setIsSubmitting(true);
         try {
             await login(email, password);
         } catch (error) {
             setLocalError(error.message || 'Failed to sign in. Please try again.');
         } finally {
+            inFlight.current = false;
             setIsSubmitting(false);
         }
     };
 
     const handleGoogleSignIn = async () => {
+        if (inFlight.current) return;
+        inFlight.current = true;
         setLocalError('');
         setIsGoogleSubmitting(true);
         try {
@@ -50,6 +57,7 @@ const LoginScreen = ({ navigation }) => {
         } catch (error) {
             setLocalError(error.message || 'Google sign-in failed.');
         } finally {
+            inFlight.current = false;
             setIsGoogleSubmitting(false);
         }
     };
@@ -132,21 +140,7 @@ const LoginScreen = ({ navigation }) => {
                         </View>
 
                         {/* Submit Button */}
-                        <TouchableOpacity
-                            style={[
-                                styles.loginButton,
-                                (isSubmitting || isGoogleSubmitting) && styles.disabledButton,
-                            ]}
-                            onPress={handleLogin}
-                            disabled={isSubmitting || isGoogleSubmitting}
-                            activeOpacity={0.8}
-                        >
-                            {isSubmitting ? (
-                                <ActivityIndicator color={COLORS.black} />
-                            ) : (
-                                <Text style={styles.loginButtonText}>Log In</Text>
-                            )}
-                        </TouchableOpacity>
+                        <PrimaryButton label="Log In" onPress={handleLogin} disabled={isGoogleSubmitting} loading={isSubmitting} />
 
                         {/* Divider */}
                         <View style={styles.dividerRow}>
@@ -181,6 +175,7 @@ const LoginScreen = ({ navigation }) => {
                         onPress={() => navigation?.navigate('Register')}
                         style={styles.signupButton}
                         accessibilityRole="button"
+                        accessibilityLabel="Sign up"
                     >
                         <Text style={styles.signupText}>Sign up</Text>
                     </TouchableOpacity>

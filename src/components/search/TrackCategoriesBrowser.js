@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import CategoryChip from './CategoryChip';
 
 const TrackCategoriesBrowser = ({ tracks, selectedCategory, onSelectCategory }) => {
   const categories = [...new Set(
@@ -16,18 +17,12 @@ const TrackCategoriesBrowser = ({ tracks, selectedCategory, onSelectCategory }) 
           {categories.map((category) => {
             const isSelected = selectedCategory === category;
             return (
-              <TouchableOpacity
+              <CategoryChip
                 key={category}
-                style={[styles.categoryChip, isSelected && styles.selectedChip]}
+                category={category}
+                selected={isSelected}
                 onPress={() => onSelectCategory(category)}
-                accessibilityRole="button"
-                accessibilityLabel={`Category: ${category}`}
-                accessibilityState={{ selected: isSelected }}
-              >
-                <Text style={[styles.categoryText, isSelected && styles.selectedText]}>
-                  {category}
-                </Text>
-              </TouchableOpacity>
+              />
             );
           })}
         </View>

@@ -1,243 +1,151 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
-    Modal,
-    View,
-    Text,
-    StyleSheet,
-    TextInput,
-    TouchableOpacity,
-    KeyboardAvoidingView,
-    Platform,
+  Keyboard, KeyboardAvoidingView, Modal, ScrollView, StyleSheet,
+  Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
-import { COLORS, SPACE, RADIUS } from '../../constants/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AppIcon from '../icons/AppIcon';
+import PlaylistButton from '../buttons/PlaylistButton';
 
-const EMOJI_OPTIONS = ['🎶', '🔥', '🎧', '🌙', '⚡', '🎉', '🏖️', '❤️', '🎸', '🎹'];
+const EMOJI_OPTIONS = ['🎶', '🔥', '🎧', '🌙', '⚡', '🎉'];
 
-const CreatePlaylistModal = ({
-    visible,
-    onClose,
-    onCreate,
-    userProfile,
-}) => {
-    const [title, setTitle] = useState('');
-    const [description, setDescription] = useState('');
-    const [selectedEmoji, setSelectedEmoji] = useState('🎶');
-    const [error, setError] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
+const CreatePlaylistModal = ({ visible, onClose, onCreate, userProfile }) => {
+  const insets = useSafeAreaInsets();
+  const titleInput = useRef(null);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [selectedEmoji, setSelectedEmoji] = useState('🎶');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
 
-    const handleCreate = async () => {
-        if (!title.trim()) return;
-        const creator = userProfile
-            ? {
-                  uid: userProfile.uid || null,
-                  name: userProfile.displayName || userProfile.username || 'You',
-                displayName: userProfile.displayName || userProfile.username || 'You',
-                username: userProfile.username || null,
-                  photoURL: userProfile.photoURL || null,
-              }
-            : null;
-        setError('');
-        setIsSubmitting(true);
-        try {
-            await onCreate({
-                title: title.trim(),
-                description: description.trim(),
-                icon: selectedEmoji,
-                creator,
-                cover: userProfile?.photoURL || null,
-            });
-            setTitle('');
-            setDescription('');
-            setSelectedEmoji('🎶');
-            onClose();
-        } catch (createError) {
-            console.warn('Could not create playlist:', createError);
-            setError('Could not create playlist. Please try again.');
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
+  const handleCreate = async () => {
+    if (!title.trim()) return;
+    const creator = userProfile ? {
+      uid: userProfile.uid || null,
+      name: userProfile.displayName || userProfile.username || 'You',
+      displayName: userProfile.displayName || userProfile.username || 'You',
+      username: userProfile.username || null,
+      photoURL: userProfile.photoURL || null,
+    } : null;
+    setError('');
+    setIsSubmitting(true);
+    try {
+      await onCreate({
+        title: title.trim(), description: description.trim(), icon: selectedEmoji,
+        creator, cover: userProfile?.photoURL || null,
+      });
+      setTitle('');
+      setDescription('');
+      setSelectedEmoji('🎶');
+      setShowOptions(false);
+      onClose();
+    } catch (createError) {
+      console.warn('Could not create playlist:', createError);
+      setError('Could not create playlist. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-    return (
-        <Modal
-            transparent
-            visible={visible}
-            animationType="fade"
-            onRequestClose={onClose}
-        >
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                style={styles.overlay}
+  return (
+    <Modal
+      transparent visible={visible} animationType="slide" statusBarTranslucent
+      onRequestClose={onClose}
+      onShow={() => titleInput.current?.focus()}
+    >
+      <KeyboardAvoidingView behavior="height" style={styles.overlay}>
+        <View style={[styles.sheet, { marginTop: insets.top + 24, paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <View style={styles.header}>
+            <TouchableOpacity
+              onPress={onClose} style={styles.closeButton}
+              accessibilityRole="button" accessibilityLabel="Close playlist creation"
             >
-                <View style={styles.dialog}>
-                    <Text style={styles.dialogTitle}>Give your playlist a name</Text>
-
-                    {/* Emoji selector */}
-                    <Text style={styles.label}>Choose an icon</Text>
-                    <View style={styles.emojiRow}>
-                        {EMOJI_OPTIONS.slice(0, 6).map((emoji) => (
-                            <TouchableOpacity
-                                key={emoji}
-                                style={[
-                                    styles.emojiButton,
-                                    selectedEmoji === emoji && styles.emojiButtonActive,
-                                ]}
-                                onPress={() => setSelectedEmoji(emoji)}
-                            >
-                                <Text style={styles.emojiText}>{emoji}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-
-                    {/* Title Input */}
-                    <TextInput
-                        style={styles.input}
-                        placeholder="My playlist #1"
-                        placeholderTextColor="#777"
-                        value={title}
-                        onChangeText={setTitle}
-                        autoFocus={visible}
-                        maxLength={40}
-                    />
-
-                    {/* Optional Description */}
-                    <TextInput
-                        style={[styles.input, styles.descInput]}
-                        placeholder="Add an optional description"
-                        placeholderTextColor="#777"
-                        value={description}
-                        onChangeText={setDescription}
-                        maxLength={100}
-                    />
-                    {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-                    {/* Action buttons */}
-                    <View style={styles.buttonRow}>
-                        <TouchableOpacity
-                            style={styles.cancelBtn}
-                            onPress={onClose}
-                            activeOpacity={0.7}
-                        >
-                            <Text style={styles.cancelText}>Cancel</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={[
-                                styles.createBtn,
-                            (!title.trim() || isSubmitting) && styles.createBtnDisabled,
-                            ]}
-                            onPress={handleCreate}
-                            disabled={!title.trim() || isSubmitting}
-                            activeOpacity={0.8}
-                        >
-                            <Text style={styles.createText}>Create</Text>
-                        </TouchableOpacity>
-                    </View>
+              <AppIcon name="close" size={28} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            style={styles.scroll} contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.naming}>
+              <Text style={styles.heading}>Give your playlist a name</Text>
+              <TextInput
+                ref={titleInput} accessibilityLabel="Playlist name"
+                style={styles.nameInput} placeholder="My playlist #1"
+                placeholderTextColor="#D4D4D4" selectionColor="#1ED760"
+                underlineColorAndroid="transparent" value={title} onChangeText={setTitle}
+                selectTextOnFocus maxLength={40} returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
+              />
+              {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+              <PlaylistButton label="Create" onPress={handleCreate} disabled={!title.trim()} loading={isSubmitting} />
+              <TouchableOpacity
+                style={styles.optionsToggle} accessibilityRole="button"
+                accessibilityLabel="More playlist options"
+                accessibilityState={{ expanded: showOptions }}
+                onPress={() => setShowOptions((value) => !value)}
+              >
+                <Text style={styles.optionsText}>{showOptions ? 'Fewer options' : 'More options'}</Text>
+              </TouchableOpacity>
+              {showOptions && (
+                <View style={styles.options}>
+                  <Text style={styles.optionsLabel}>Choose an icon</Text>
+                  <View style={styles.emojiRow}>
+                    {EMOJI_OPTIONS.map((emoji) => (
+                      <TouchableOpacity
+                        key={emoji} accessibilityRole="button"
+                        accessibilityLabel={`Use ${emoji} as playlist icon`}
+                        accessibilityState={{ selected: selectedEmoji === emoji }}
+                        style={[styles.emojiButton, selectedEmoji === emoji && styles.emojiSelected]}
+                        onPress={() => setSelectedEmoji(emoji)}
+                      >
+                        <Text style={styles.emojiText}>{emoji}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <TextInput
+                    accessibilityLabel="Playlist description" style={styles.descriptionInput}
+                    placeholder="Add an optional description" placeholderTextColor="#B3B3B3"
+                    value={description} onChangeText={setDescription} maxLength={100}
+                  />
                 </View>
-            </KeyboardAvoidingView>
-        </Modal>
-    );
+              )}
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
 };
 
 const styles = StyleSheet.create({
-    overlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: SPACE.lg,
-    },
-    dialog: {
-        width: '100%',
-        maxWidth: 360,
-        backgroundColor: '#242424',
-        borderRadius: RADIUS.lg,
-        padding: SPACE.xl,
-        borderWidth: 1,
-        borderColor: '#333',
-    },
-    dialogTitle: {
-        color: COLORS.textPrimary,
-        fontSize: 20,
-        fontWeight: 'bold',
-        textAlign: 'center',
-        marginBottom: SPACE.md,
-    },
-    label: {
-        color: COLORS.textSecondary,
-        fontSize: 12,
-        marginBottom: 8,
-    },
-    emojiRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: SPACE.md,
-    },
-    emojiButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#303030',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    emojiButtonActive: {
-        borderWidth: 2,
-        borderColor: COLORS.primary,
-        backgroundColor: '#1E382B',
-    },
-    emojiText: {
-        fontSize: 20,
-    },
-    input: {
-        backgroundColor: '#181818',
-        borderRadius: RADIUS.sm,
-        paddingHorizontal: SPACE.md,
-        paddingVertical: 12,
-        color: COLORS.textPrimary,
-        fontSize: 15,
-        marginBottom: SPACE.sm,
-        borderWidth: 1,
-        borderColor: '#383838',
-    },
-    descInput: {
-        fontSize: 13,
-    },
-    buttonRow: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        marginTop: SPACE.md,
-    },
-    cancelBtn: {
-        paddingVertical: 10,
-        paddingHorizontal: SPACE.lg,
-        marginRight: SPACE.sm,
-    },
-    cancelText: {
-        color: COLORS.textSecondary,
-        fontSize: 15,
-        fontWeight: '600',
-    },
-    createBtn: {
-        backgroundColor: COLORS.primary,
-        paddingVertical: 10,
-        paddingHorizontal: SPACE.xl,
-        borderRadius: RADIUS.circle,
-    },
-    createBtnDisabled: {
-        backgroundColor: '#2A5E3A',
-        opacity: 0.6,
-    },
-    createText: {
-        color: COLORS.black,
-        fontSize: 15,
-        fontWeight: 'bold',
-    },
-    errorText: {
-        color: '#FF8A8A',
-        fontSize: 13,
-        marginBottom: SPACE.sm,
-    },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)' },
+  sheet: {
+    flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    backgroundColor: '#303030', backgroundImage: 'linear-gradient(180deg, #484848 0%, #252525 100%)', overflow: 'hidden',
+  },
+  header: { height: 64, paddingHorizontal: 12, justifyContent: 'center', alignItems: 'flex-end' },
+  closeButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
+  scroll: { flex: 1 },
+  content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 32, paddingVertical: 24 },
+  naming: { width: '100%', maxWidth: 560, alignSelf: 'center' },
+  heading: { color: '#FFFFFF', fontSize: 19, fontWeight: '700', textAlign: 'center', marginBottom: 56 },
+  nameInput: {
+    color: '#FFFFFF', fontSize: 34, fontWeight: '700', textAlign: 'center',
+    borderBottomColor: '#898989', borderBottomWidth: 1, paddingVertical: 10,
+    paddingHorizontal: 0, marginBottom: 32,
+  },
+  optionsToggle: { minHeight: 48, alignSelf: 'center', justifyContent: 'center', paddingHorizontal: 16, marginTop: 8 },
+  optionsText: { color: '#D0D0D0', fontSize: 13 },
+  options: { marginTop: 16 },
+  optionsLabel: { color: '#E0E0E0', fontSize: 14, marginBottom: 12 },
+  emojiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: 16 },
+  emojiButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 24, backgroundColor: '#343434' },
+  emojiSelected: { borderWidth: 2, borderColor: '#1ED760' },
+  emojiText: { fontSize: 24 },
+  descriptionInput: { color: '#FFFFFF', backgroundColor: '#242424', borderRadius: 8, padding: 12, fontSize: 15, minHeight: 48 },
+  error: { color: '#FFB4AB', textAlign: 'center', marginBottom: 16, fontSize: 14 },
 });
 
 export default CreatePlaylistModal;

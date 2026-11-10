@@ -21,7 +21,7 @@ describe('LoginScreen', () => {
       renderer = ReactTestRenderer.create(<LoginScreen navigation={{ navigate }} />);
     });
 
-    const signUpButton = renderer.root.findByProps({ accessibilityRole: 'button' });
+    const signUpButton = renderer.root.findByProps({ accessibilityRole: 'button', accessibilityLabel: 'Sign up' });
 
     await ReactTestRenderer.act(() => signUpButton.props.onPress());
 

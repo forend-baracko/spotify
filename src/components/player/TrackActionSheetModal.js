@@ -14,6 +14,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACE } from '../../constants/theme';
 import { getArtworkSource } from '../../utils/artworkHelper';
+import AppIcon from '../icons/AppIcon';
+import SecondaryButton from '../buttons/SecondaryButton';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -81,7 +83,7 @@ const TrackActionSheetModal = ({
     const actionItems = [
         {
             id: 'like',
-            icon: isLiked ? '💚' : '♡',
+            icon: 'favorite',
             title: isLiked ? 'Remove from Liked Songs' : 'Save to your Liked Songs',
             onPress: () => {
                 onClose();
@@ -90,7 +92,7 @@ const TrackActionSheetModal = ({
         },
         {
             id: 'queue',
-            icon: '⤹',
+            icon: 'queue',
             title: 'Add to queue',
             onPress: () => {
                 onClose();
@@ -99,7 +101,7 @@ const TrackActionSheetModal = ({
         },
         {
             id: 'go_to_queue',
-            icon: '≡',
+            icon: 'queue',
             title: 'Go to queue',
             onPress: () => {
                 onClose();
@@ -108,7 +110,7 @@ const TrackActionSheetModal = ({
         },
         {
             id: 'add_playlist',
-            icon: '➕',
+            icon: 'playlistAdd',
             title: 'Add to playlist',
             onPress: () => {
                 onClose();
@@ -119,7 +121,7 @@ const TrackActionSheetModal = ({
             ? [
                   {
                       id: 'remove_playlist',
-                      icon: '🗑️',
+                      icon: 'delete',
                       title: 'Remove from this playlist',
                       isDestructive: true,
                       onPress: () => {
@@ -131,7 +133,7 @@ const TrackActionSheetModal = ({
             : []),
         {
             id: 'share',
-            icon: '↗',
+            icon: 'share',
             title: 'Share song',
             onPress: handleShare,
         },
@@ -186,16 +188,11 @@ const TrackActionSheetModal = ({
                                 style={styles.actionRow}
                                 activeOpacity={0.7}
                                 onPress={item.onPress}
+                                accessibilityRole="button"
+                                accessibilityLabel={item.title}
                             >
                                 <View style={styles.actionIconBox}>
-                                    <Text
-                                        style={[
-                                            styles.actionIcon,
-                                            item.isDestructive && styles.destructiveText,
-                                        ]}
-                                    >
-                                        {item.icon}
-                                    </Text>
+                                    <AppIcon name={item.icon} size={24} color={item.isDestructive ? '#FF6B6B' : '#FFFFFF'} />
                                 </View>
                                 <Text
                                     style={[
@@ -210,13 +207,7 @@ const TrackActionSheetModal = ({
                     </View>
 
                     {/* Close button */}
-                    <TouchableOpacity
-                        style={styles.closeButton}
-                        activeOpacity={0.8}
-                        onPress={onClose}
-                    >
-                        <Text style={styles.closeButtonText}>Close</Text>
-                    </TouchableOpacity>
+                    <SecondaryButton label="Close" onPress={onClose} />
                 </Animated.View>
             </View>
         </Modal>

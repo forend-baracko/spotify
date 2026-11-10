@@ -1,4 +1,5 @@
 import React from 'react';
+import AppIcon from '../icons/AppIcon';
 import {
     Modal,
     View,
@@ -38,9 +39,11 @@ const RecentPlayedModal = ({
                     <TouchableOpacity
                         style={styles.backBtn}
                         onPress={onClose}
+                        accessibilityRole="button"
+                        accessibilityLabel="Close recently played"
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
-                        <Text style={styles.backIcon}>‹</Text>
+                        <AppIcon name="back" size={28} color="#FFFFFF" />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Recently Played</Text>
                     <View style={{ width: 36 }} />
