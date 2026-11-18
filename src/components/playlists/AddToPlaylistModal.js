@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     Modal,
     View,
@@ -9,12 +9,14 @@ import {
     TouchableWithoutFeedback,
     ScrollView,
     Dimensions,
+    Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACE, RADIUS } from '../../constants/theme';
 import { getArtworkSource } from '../../utils/artworkHelper';
 import CreatePlaylistModal from './CreatePlaylistModal';
 import SecondaryButton from '../buttons/SecondaryButton';
+import PlaylistPickerRow from './PlaylistPickerRow';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -29,6 +31,16 @@ const AddToPlaylistModal = ({
 }) => {
     const insets = useSafeAreaInsets();
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const createEpoch = useRef(0);
+    useEffect(() => {
+        createEpoch.current += 1;
+        return () => { createEpoch.current += 1; };
+    }, [visible, track?.id]);
+
+    const closeCreate = () => {
+        createEpoch.current += 1;
+        setIsCreateModalOpen(false);
+    };
 
     if (!track) return null;
 
@@ -36,10 +48,12 @@ const AddToPlaylistModal = ({
         if (!onCreatePlaylist) {
             throw new Error('Playlist creation is unavailable.');
         }
+        const epoch = ++createEpoch.current;
         const newPlaylist = await onCreatePlaylist({
             ...playlistData,
             initialTrack: track,
         });
+        if (Platform.OS === 'android' && epoch !== createEpoch.current) return newPlaylist;
         if (!newPlaylist) {
             throw new Error('Playlist creation did not return a playlist.');
         }
@@ -107,40 +121,20 @@ const AddToPlaylistModal = ({
                         showsVerticalScrollIndicator={false}
                     >
                         {playlists.map((pl) => {
-                            const count = pl.tracks ? pl.tracks.length : 0;
                             const isAlreadyIn = (pl.tracks || []).some(t => t.id === track.id);
 
                             return (
-                                <TouchableOpacity
+                                <PlaylistPickerRow
                                     key={pl.id}
-                                    style={styles.playlistRow}
-                                    activeOpacity={0.7}
+                                    playlist={pl}
+                                    alreadyAdded={isAlreadyIn}
                                     onPress={() => {
                                         if (onSelectPlaylist) {
                                             onSelectPlaylist(pl.id, track);
                                         }
                                         onClose();
                                     }}
-                                >
-                                    <View style={styles.playlistIconBox}>
-                                        <Text style={styles.playlistEmoji}>{pl.icon || '🎶'}</Text>
-                                    </View>
-                                    <View style={styles.playlistInfo}>
-                                        <Text style={styles.playlistTitle} numberOfLines={1}>
-                                            {pl.title}
-                                        </Text>
-                                        <Text style={styles.playlistMeta}>
-                                            {count} {count === 1 ? 'song' : 'songs'}
-                                        </Text>
-                                    </View>
-                                    {isAlreadyIn ? (
-                                        <View style={styles.addedBadge}>
-                                            <Text style={styles.addedBadgeText}>Added ✓</Text>
-                                        </View>
-                                    ) : (
-                                        <Text style={styles.addPlus}>+</Text>
-                                    )}
-                                </TouchableOpacity>
+                                />
                             );
                         })}
                     </ScrollView>
@@ -150,7 +144,7 @@ const AddToPlaylistModal = ({
             </Modal>
             <CreatePlaylistModal
                 visible={visible && isCreateModalOpen}
-                onClose={() => setIsCreateModalOpen(false)}
+                onClose={closeCreate}
                 onCreate={handleCreateAndAdd}
                 userProfile={userProfile}
             />

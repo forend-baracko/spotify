@@ -5,13 +5,14 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Image,
+
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import audioPlayer from '../../services/audioPlayer';
 import { getArtworkSource } from '../../utils/artworkHelper';
 import AppIcon from '../icons/AppIcon';
+import QueueTrackRow from './QueueTrackRow';
 
 export default function QueueModal({ visible, onClose }) {
   const [queue, setQueue] = useState([]);
@@ -49,43 +50,14 @@ export default function QueueModal({ visible, onClose }) {
     const isNowPlaying = queueIndex === currentIndex;
 
     return (
-      <View style={[styles.trackRow, isNowPlaying && styles.activeRow]}>
-        <TouchableOpacity
-          style={styles.trackInfoContainer}
-          onPress={() => handleSelectTrack(queueIndex)}
-          activeOpacity={0.7}
-        >
-          <Image
-            source={getArtworkSource(
-              item.artwork ||
-                'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80'
-            )}
-            style={styles.artwork}
-          />
-          <View style={styles.textContainer}>
-            <Text
-              style={[styles.trackTitle, isNowPlaying && styles.greenText]}
-              numberOfLines={1}
-            >
-              {item.title || 'Unknown Title'}
-            </Text>
-            <Text style={styles.trackArtist} numberOfLines={1}>
-              {item.artist || 'Unknown Artist'}
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        {!isNowPlaying && (
-          <TouchableOpacity
-            onPress={() => handleRemoveTrack(queueIndex)}
-            style={styles.removeBtn}
-            accessibilityRole="button"
-            accessibilityLabel={`Remove ${item.title || 'track'} from queue`}
-          >
-            <AppIcon name="close" size={22} color="#B3B3B3" />
-          </TouchableOpacity>
-        )}
-      </View>
+      <QueueTrackRow
+        title={item.title || 'Unknown Title'}
+        artist={item.artist || 'Unknown Artist'}
+        artwork={getArtworkSource(item.artwork || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80')}
+        selected={isNowPlaying}
+        onPlay={() => handleSelectTrack(queueIndex)}
+        onRemove={isNowPlaying ? undefined : () => handleRemoveTrack(queueIndex)}
+      />
     );
   };
 

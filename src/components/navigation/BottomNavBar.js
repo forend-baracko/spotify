@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { COLORS, SPACE } from '../../constants/theme';
+import { COLORS } from '../../constants/theme';
 import audioPlayer from '../../services/audioPlayer';
 import { getArtworkSource } from '../../utils/artworkHelper';
 import AppIcon from '../icons/AppIcon';
+import NavigationTabs from './NavigationTabs';
 
 export const TABS = {
   HOME: 'Home',
@@ -47,12 +48,6 @@ const BottomNavBar = ({ activeTab, onSelectTab, onOpenPlayer, isCreateModalOpen 
     };
   }, []);
 
-  const tabs = [
-    { id: TABS.HOME, label: 'Home', icon: 'home' },
-    { id: TABS.SEARCH, label: 'Search', icon: 'search' },
-    { id: TABS.LIBRARY, label: 'Your Library', icon: 'library' },
-    { id: TABS.CREATE, label: 'Create', icon: 'add' },
-  ];
 
   const handleTogglePlay = (e) => {
     if (e && typeof e.stopPropagation === 'function') {
@@ -126,45 +121,7 @@ const BottomNavBar = ({ activeTab, onSelectTab, onOpenPlayer, isCreateModalOpen 
         </TouchableOpacity>
       )}
 
-      {/* Navigation Tab Bar */}
-      <View style={styles.container}>
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
-          const isCreateBtn = tab.id === TABS.CREATE;
-
-          return (
-            <TouchableOpacity
-              key={tab.id}
-              style={styles.tabButton}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel={isCreateModalOpen && isCreateBtn ? 'Close Create' : tab.label}
-              accessibilityState={{ selected: isActive }}
-              onPress={() => onSelectTab && onSelectTab(tab.id)}
-            >
-              {isCreateModalOpen && isCreateBtn ? (
-                <View style={styles.closeCircle}>
-                  <AppIcon name="close" size={16} color="#000000" />
-                </View>
-              ) : (
-                <>
-                  <AppIcon
-                    name={tab.icon}
-                    size={20}
-                    color={isActive ? '#FFFFFF' : '#B3B3B3'}
-                  />
-                  <Text
-                    style={[styles.tabLabel, isActive && styles.activeTabLabel]}
-                    numberOfLines={1}
-                  >
-                    {tab.label}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      <NavigationTabs activeTab={activeTab} onSelectTab={onSelectTab} isCreateModalOpen={isCreateModalOpen} />
     </View>
   );
 };
@@ -235,40 +192,6 @@ const styles = StyleSheet.create({
   progressBarFill: {
     height: '100%',
     backgroundColor: '#1DB954',
-  },
-  container: {
-    flexDirection: 'row',
-    height: 62,
-    backgroundColor: '#000000',
-    borderTopWidth: 0.5,
-    borderTopColor: '#1A1A1A',
-    paddingHorizontal: SPACE?.sm || 8,
-    paddingBottom: 4,
-    alignItems: 'center',
-    justifyContent: 'space-around',
-  },
-  tabButton: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 6,
-  },
-  tabLabel: {
-    color: '#B3B3B3',
-    fontSize: 10,
-    fontWeight: '500',
-  },
-  activeTabLabel: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  closeCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });
 

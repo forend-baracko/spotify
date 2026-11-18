@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import AppIcon from '../icons/AppIcon';
 import PrimaryButton from '../buttons/PrimaryButton';
 import SecondaryButton from '../buttons/SecondaryButton';
 import {
   ActivityIndicator,
   Linking,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -14,6 +15,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { createGeminiDjSet, getGeminiStatus } from '../../services/geminiService';
 import TrackCategoriesBrowser from './TrackCategoriesBrowser';
+import DJPanel from './DJPanel';
 
 const shuffleTracks = (items) => {
   const shuffled = [...items];
@@ -35,6 +37,16 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
   const [isConfigured, setIsConfigured] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const requestEpoch = useRef(0);
+
+  const invalidatePick = () => {
+    if (Platform.OS !== 'android') return;
+    requestEpoch.current += 1;
+    setDjSet(null);
+    setSetTracks([]);
+    setError('');
+    setIsLoading(false);
+  };
 
   const checkStatus = useCallback(async () => {
     setIsCheckingStatus(true);
@@ -46,6 +58,7 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
 
   useEffect(() => {
     checkStatus();
+    return () => { if (Platform.OS === 'android') requestEpoch.current += 1; };
   }, [checkStatus]);
 
   const buildSet = async () => {
@@ -69,9 +82,11 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
       return;
     }
 
+    const epoch = ++requestEpoch.current;
     setIsLoading(true);
     try {
       const result = await createGeminiDjSet(user, prompt.trim(), catalogTracks);
+      if (requestEpoch.current !== epoch) return;
       const tracksById = new Map(catalogTracks.map((track) => [track.id, track]));
       const selectedTrack = tracksById.get(result.trackId);
       if (!selectedTrack) {
@@ -84,9 +99,9 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
       setSetTracks([selectedTrack, ...initialQueue]);
       setDjSet(result);
     } catch (requestError) {
-      setError(requestError.message || 'Could not create a DJ set. Please try again.');
+      if (requestEpoch.current === epoch) setError(requestError.message || 'Could not create a DJ set. Please try again.');
     } finally {
-      setIsLoading(false);
+      if (requestEpoch.current === epoch) setIsLoading(false);
     }
   };
 
@@ -102,7 +117,7 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <DJPanel style={styles.container}>
       <View style={styles.headingRow}>
         <View style={styles.iconCircle}>
           <AppIcon name="music" size={24} color="#FFFFFF" />
@@ -120,6 +135,7 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
         selectedCategory={selectedCategory}
         onSelectCategory={(category) => {
           const nextCategory = selectedCategory === category ? null : category;
+          invalidatePick();
           setSelectedCategory(nextCategory);
           setPrompt(nextCategory || '');
         }}
@@ -131,7 +147,10 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
           <TextInput
             style={styles.input}
             value={prompt}
-            onChangeText={setPrompt}
+            onChangeText={(text) => {
+              if (text !== prompt) invalidatePick();
+              setPrompt(text);
+            }}
             placeholder="e.g. sad OPM R&B or upbeat rap"
             placeholderTextColor="#727272"
             maxLength={500}
@@ -201,7 +220,7 @@ const GeminiDJ = ({ tracks, onStartSet }) => {
           </TouchableOpacity>
         </View>
       )}
-    </View>
+    </DJPanel>
   );
 };
 
@@ -211,10 +230,6 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: 20,
     padding: 16,
-    borderRadius: 14,
-    backgroundColor: '#22152D',
-    borderColor: '#503366',
-    borderWidth: 1,
   },
   headingRow: {
     flexDirection: 'row',

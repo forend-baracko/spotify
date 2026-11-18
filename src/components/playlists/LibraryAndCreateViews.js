@@ -1,15 +1,18 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
-    TouchableOpacity,
+    Platform,
+
 } from 'react-native';
 import { COLORS, SPACE, RADIUS } from '../../constants/theme';
 import { useMusic } from '../../context/MusicContext';
 import CreatePlaylistModal from './CreatePlaylistModal';
-import AppIcon from '../icons/AppIcon';
+
+import LibraryPlaylistRow from './LibraryPlaylistRow';
+import CreatePlaylistCard from './CreatePlaylistCard';
 
 export const LibraryView = ({ onOpenPlaylist }) => {
     const { playlists } = useMusic();
@@ -21,32 +24,9 @@ export const LibraryView = ({ onOpenPlaylist }) => {
                 <Text style={[styles.tabHeading, styles.libraryHeading]}>Your Library</Text>
 
                 {/* Playlist list */}
-                {playlists.map((pl) => {
-                    const count = pl.tracks ? pl.tracks.length : 0;
-                    return (
-                        <TouchableOpacity
-                            key={pl.id}
-                            style={styles.playlistRow}
-                            activeOpacity={0.7}
-                            onPress={() => {
-                                if (onOpenPlaylist) {
-                                    onOpenPlaylist(pl);
-                                }
-                            }}
-                        >
-                            <View style={styles.playlistIconBox}>
-                                <Text style={styles.playlistEmoji}>{pl.icon || '🎶'}</Text>
-                            </View>
-                            <View style={styles.playlistInfo}>
-                                <Text style={styles.playlistTitle}>{pl.title}</Text>
-                                <Text style={styles.playlistMeta}>
-                                    {pl.type} • {count} {count === 1 ? 'song' : 'songs'}
-                                </Text>
-                            </View>
-                            <AppIcon name="forward" size={24} color="#B3B3B3" />
-                        </TouchableOpacity>
-                    );
-                })}
+                {playlists.map((pl) => (
+                    <LibraryPlaylistRow key={pl.id} playlist={pl} onPress={onOpenPlaylist} />
+                ))}
 
             </ScrollView>
         </View>
@@ -56,6 +36,12 @@ export const LibraryView = ({ onOpenPlaylist }) => {
 export const CreateView = ({ onOpenPlaylist, onSwitchToLibrary, userProfile }) => {
     const { createPlaylist } = useMusic();
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const createEpoch = useRef(0);
+    useEffect(() => () => { createEpoch.current += 1; }, []);
+    const closeCreate = () => {
+        createEpoch.current += 1;
+        setIsCreateModalOpen(false);
+    };
 
     const options = [
         {
@@ -68,12 +54,18 @@ export const CreateView = ({ onOpenPlaylist, onSwitchToLibrary, userProfile }) =
     ];
 
     const handleCreatePlaylist = async (playlistData) => {
+        const epoch = ++createEpoch.current;
         const newPl = await createPlaylist(playlistData);
+        if (Platform.OS === 'android' && epoch !== createEpoch.current) return newPl;
+        if (Platform.OS === 'android' && !newPl) {
+            throw new Error('Playlist creation did not return a playlist.');
+        }
         if (newPl && onOpenPlaylist) {
             onOpenPlaylist(newPl);
         } else if (onSwitchToLibrary) {
             onSwitchToLibrary();
         }
+        if (Platform.OS === 'android') return newPl;
     };
 
     return (
@@ -84,28 +76,20 @@ export const CreateView = ({ onOpenPlaylist, onSwitchToLibrary, userProfile }) =
 
                 <View style={styles.createGrid}>
                     {options.map((opt) => (
-                        <TouchableOpacity
+                        <CreatePlaylistCard
                             key={opt.id}
-                            style={styles.createCard}
-                            activeOpacity={0.7}
+                            title={opt.title}
+                            desc={opt.desc}
+                            icon={opt.icon}
                             onPress={opt.action}
-                        >
-                            <View style={styles.createIconBox}>
-                                <AppIcon name={opt.icon} size={30} color="#FFFFFF" />
-                            </View>
-                            <View style={styles.createTextContainer}>
-                                <Text style={styles.createCardTitle}>{opt.title}</Text>
-                                <Text style={styles.createCardDesc}>{opt.desc}</Text>
-                            </View>
-                            <AppIcon name="add" size={24} color="#FFFFFF" />
-                        </TouchableOpacity>
+                        />
                     ))}
                 </View>
             </ScrollView>
 
             <CreatePlaylistModal
                 visible={isCreateModalOpen}
-                onClose={() => setIsCreateModalOpen(false)}
+                onClose={closeCreate}
                 onCreate={handleCreatePlaylist}
                 userProfile={userProfile}
             />

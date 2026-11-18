@@ -2,9 +2,10 @@ import React from 'react';
 import {
   Alert,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
-  Switch,
+
   Text,
   TouchableOpacity,
   View,
@@ -12,6 +13,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACE, RADIUS } from '../../constants/theme';
 import AppIcon from '../icons/AppIcon';
+import PrivateSessionSwitch from './PrivateSessionSwitch';
+import SecondaryButton from '../buttons/SecondaryButton';
+import SettingsDangerButton from './SettingsDangerButton';
 
 const SettingsModal = ({
   visible,
@@ -37,6 +41,16 @@ const SettingsModal = ({
     } catch (error) {
       Alert.alert('Could not save setting', 'Please try changing private session again.');
     }
+  };
+
+  const handleOpenProfile = () => {
+    onClose();
+    onOpenProfile?.();
+  };
+
+  const handleSignOut = () => {
+    onClose();
+    onLogout?.();
   };
 
   const confirmClearHistory = () => {
@@ -83,16 +97,13 @@ const SettingsModal = ({
             <Text style={styles.sectionTitle}>Account</Text>
             <Text style={styles.accountName}>{displayName}</Text>
             <Text style={styles.accountEmail}>{user?.email || 'Email unavailable'}</Text>
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => {
-                onClose();
-                onOpenProfile?.();
-              }}
-              accessibilityRole="button"
-            >
-              <Text style={styles.secondaryButtonText}>View profile</Text>
-            </TouchableOpacity>
+            {Platform.OS === 'android' ? (
+              <SecondaryButton label="View profile" onPress={handleOpenProfile} style={styles.secondaryButtonNative} />
+            ) : (
+              <TouchableOpacity style={styles.secondaryButton} onPress={handleOpenProfile} accessibilityRole="button">
+                <Text style={styles.secondaryButtonText}>View profile</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={styles.section}>
@@ -104,12 +115,9 @@ const SettingsModal = ({
                   When enabled, tracks you play are not saved to Recents or listening stats.
                 </Text>
               </View>
-              <Switch
+              <PrivateSessionSwitch
                 value={privateSession}
                 onValueChange={handlePrivateSessionChange}
-                accessibilityLabel="Private session"
-                trackColor={{ false: '#444444', true: COLORS.primary }}
-                thumbColor={COLORS.white}
               />
             </View>
           </View>
@@ -119,25 +127,22 @@ const SettingsModal = ({
             <Text style={styles.settingDescription}>
               Remove the recent tracks saved on this device. Your playlists and liked tracks will stay.
             </Text>
-            <TouchableOpacity
-              style={styles.dangerButton}
-              onPress={confirmClearHistory}
-              accessibilityRole="button"
-            >
-              <Text style={styles.dangerButtonText}>Clear listening history</Text>
-            </TouchableOpacity>
+            {Platform.OS === 'android' ? (
+              <SettingsDangerButton label="Clear listening history" onPress={confirmClearHistory} style={styles.dangerButtonNative} />
+            ) : (
+              <TouchableOpacity style={styles.dangerButton} onPress={confirmClearHistory} accessibilityRole="button">
+                <Text style={styles.dangerButtonText}>Clear listening history</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
-          <TouchableOpacity
-            style={styles.signOutButton}
-            onPress={() => {
-              onClose();
-              onLogout?.();
-            }}
-            accessibilityRole="button"
-          >
-            <Text style={styles.signOutText}>Sign out</Text>
-          </TouchableOpacity>
+          {Platform.OS === 'android' ? (
+            <SettingsDangerButton label="Sign out" onPress={handleSignOut} fullWidth style={styles.signOutButtonNative} />
+          ) : (
+            <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut} accessibilityRole="button">
+              <Text style={styles.signOutText}>Sign out</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </View>
     </Modal>
@@ -211,6 +216,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACE.sm,
     marginTop: SPACE.md,
   },
+  secondaryButtonNative: { alignSelf: 'flex-start', marginTop: SPACE.md },
   secondaryButtonText: {
     color: COLORS.textPrimary,
     fontSize: 14,
@@ -244,6 +250,8 @@ const styles = StyleSheet.create({
     paddingVertical: SPACE.sm,
     marginTop: SPACE.md,
   },
+  dangerButtonNative: { marginTop: SPACE.md },
+  signOutButtonNative: { marginTop: SPACE.xs },
   dangerButtonText: {
     color: '#FF8A8A',
     fontSize: 14,

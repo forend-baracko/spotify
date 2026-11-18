@@ -1,0 +1,31 @@
+import React from 'react';
+import ReactTestRenderer from 'react-test-renderer';
+import { Platform, Text, TouchableOpacity } from 'react-native';
+const mockLogin = jest.fn();
+jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ login: mockLogin, loginGoogle: jest.fn(), isConfigured: true }) }));
+require('../test-utils/expoIcons');
+jest.doMock('../src/components/auth/AuthEmailField', () => jest.requireActual('../src/components/auth/AuthEmailField.android'));
+jest.doMock('../src/components/auth/AuthPasswordField', () => jest.requireActual('../src/components/auth/AuthPasswordField.android'));
+const LoginScreen = require('../src/navigation/LoginScreen').default;
+describe('Android native login password', () => {
+  let renderer, platform;
+  beforeEach(() => { platform = Platform.OS; Platform.OS = 'android'; mockLogin.mockReset(); });
+  afterEach(async () => { if (renderer) await ReactTestRenderer.act(() => renderer.unmount()); renderer = null; Platform.OS = platform; });
+  it('retains secure visibility toggle and exact mocked login payload', async () => {
+    mockLogin.mockResolvedValue(undefined);
+    await ReactTestRenderer.act(() => { renderer = ReactTestRenderer.create(<LoginScreen navigation={{}} />); });
+    const field = (label) => renderer.root.findAllByType('ExpoUiTextInput').find((node) => node.props.placeholder === label);
+    expect(field('Password')).toBeDefined();
+    expect(field('Email address').props.autoComplete).toBe('email');
+    expect(field('Password').props.autoComplete).toBe('current-password');
+    await ReactTestRenderer.act(() => { field('Email address').props.value.value = 'test@example.com'; field('Email address').props.onChangeText('test@example.com'); field('Password').props.value.value = 'mock-secret'; field('Password').props.onChangeText('mock-secret'); });
+    expect(field('Password').props.secureTextEntry).toBe(true);
+    const show = renderer.root.findAllByType(TouchableOpacity).find((node) => node.findAllByType(Text).some((text) => text.props.children === 'Show'));
+    await ReactTestRenderer.act(() => show.props.onPress());
+    expect(field('Password').props.secureTextEntry).toBe(false);
+    expect(field('Password').props.value.value).toBe('mock-secret');
+    const submit = renderer.root.findAllByType('ExpoUiButton').find((node) => node.props.label === 'Log In');
+    await ReactTestRenderer.act(async () => submit.props.onPress());
+    expect(mockLogin).toHaveBeenCalledWith('test@example.com', 'mock-secret');
+  });
+});

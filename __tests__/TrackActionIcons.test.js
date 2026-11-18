@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { Animated, Text, TouchableOpacity } from 'react-native';
+import { Animated, PanResponder, Text, TouchableOpacity } from 'react-native';
 
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 require('../test-utils/expoIcons');
@@ -34,6 +34,55 @@ describe('track action icon contracts', () => {
     await ReactTestRenderer.act(() => button.props.onPress());
     expect(close).toHaveBeenCalledTimes(1);
     expect(action).toHaveBeenCalledWith(track);
+  });
+
+  it('subscribes once to swipe position and removes the listener on unmount', async () => {
+    const add = jest.spyOn(Animated.Value.prototype, 'addListener');
+    const remove = jest.spyOn(Animated.Value.prototype, 'removeListener');
+    await ReactTestRenderer.act(() => { renderer = ReactTestRenderer.create(<SwipeableTrackRow track={track} />); });
+    await ReactTestRenderer.act(() => { renderer.update(<SwipeableTrackRow track={track} isLiked />); });
+    expect(add).toHaveBeenCalledTimes(1);
+    const listenerId = add.mock.results[0].value;
+    await ReactTestRenderer.act(() => renderer.unmount());
+    renderer = null;
+    expect(remove).toHaveBeenCalledWith(listenerId);
+  });
+
+  it('uses the current track and callbacks after a swipe-row rerender', async () => {
+    let gesture;
+    jest.spyOn(PanResponder, 'create').mockImplementation((config) => { gesture ||= config; return { panHandlers: {} }; });
+    jest.spyOn(Animated, 'spring').mockImplementation(() => ({ start: (complete) => complete?.() }));
+    const oldQueue = jest.fn();
+    const newQueue = jest.fn();
+    const nextTrack = { id: 'song-2', title: 'Next', artist: 'Another' };
+    await ReactTestRenderer.act(() => { renderer = ReactTestRenderer.create(<SwipeableTrackRow track={track} onAddToQueue={oldQueue} />); });
+    await ReactTestRenderer.act(() => { renderer.update(<SwipeableTrackRow track={nextTrack} onAddToQueue={newQueue} />); });
+    await ReactTestRenderer.act(() => {
+      gesture.onPanResponderGrant();
+      gesture.onPanResponderMove(null, { dx: 100 });
+      gesture.onPanResponderRelease(null, { dx: 100 });
+    });
+    expect(oldQueue).not.toHaveBeenCalled();
+    expect(newQueue).toHaveBeenCalledWith(nextTrack);
+  });
+
+  it('keeps the swiped track when playlist animation finishes after a rerender', async () => {
+    let gesture;
+    let finishAnimation;
+    jest.spyOn(PanResponder, 'create').mockImplementation((config) => { gesture ||= config; return { panHandlers: {} }; });
+    jest.spyOn(Animated, 'spring').mockImplementation(() => ({ start: (complete) => { finishAnimation = complete; } }));
+    const first = jest.fn();
+    const selected = jest.fn();
+    const later = jest.fn();
+    const nextTrack = { id: 'song-2', title: 'Next', artist: 'Another' };
+    await ReactTestRenderer.act(() => { renderer = ReactTestRenderer.create(<SwipeableTrackRow track={track} onAddToPlaylist={first} />); });
+    await ReactTestRenderer.act(() => { renderer.update(<SwipeableTrackRow track={nextTrack} onAddToPlaylist={selected} />); });
+    await ReactTestRenderer.act(() => { gesture.onPanResponderGrant(); gesture.onPanResponderMove(null, { dx: -100 }); gesture.onPanResponderRelease(null, { dx: -100 }); });
+    await ReactTestRenderer.act(() => { renderer.update(<SwipeableTrackRow track={track} onAddToPlaylist={later} />); });
+    await ReactTestRenderer.act(() => finishAnimation());
+    expect(selected).toHaveBeenCalledWith(nextTrack);
+    expect(first).not.toHaveBeenCalled();
+    expect(later).not.toHaveBeenCalled();
   });
 
   it('keeps swipe-row queue, playlist, like and menu actions separate from playback', async () => {

@@ -3,6 +3,7 @@ import AppIcon from '../icons/AppIcon';
 import {
   Alert,
   Modal,
+  Platform,
   ScrollView,
   Share,
   StyleSheet,
@@ -12,6 +13,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACE, RADIUS } from '../../constants/theme';
+import StatsMetricCard from './StatsMetricCard';
+import StatsTrackRow from './StatsTrackRow';
 
 const FOUR_WEEKS_MS = 28 * 24 * 60 * 60 * 1000;
 
@@ -59,7 +62,7 @@ const UserStatsModal = ({ visible, onClose, userProfile, user, recentTracks = []
     try {
       await Share.share({
         title: 'My listening stats',
-        message: `My Spotibai listening stats: ${recentTracks.length} saved recently played tracks, ${stats.uniqueArtists} artists, and ${stats.estimatedMinutes} estimated minutes listened.`,
+        message: `My Spotibai listening stats: ${recentTracks.length} saved recently played tracks, ${stats.uniqueArtists} artists, and ${stats.estimatedMinutes} estimated minutes ${Platform.OS === 'android' ? 'of track duration' : 'listened'}.`,
       });
     } catch (error) {
       console.warn('Could not share listening stats:', error);
@@ -97,20 +100,9 @@ const UserStatsModal = ({ visible, onClose, userProfile, user, recentTracks = []
           </Text>
 
           <View style={styles.statsGrid}>
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>{stats.lastFourWeeks.length}</Text>
-              <Text style={styles.statLabel}>Tracks in the last 4 weeks</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>{stats.uniqueArtists}</Text>
-              <Text style={styles.statLabel}>Artists in saved history</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>
-                {stats.estimatedMinutes ? `${stats.estimatedMinutes}m` : '—'}
-              </Text>
-              <Text style={styles.statLabel}>Estimated track duration</Text>
-            </View>
+            <StatsMetricCard value={stats.lastFourWeeks.length} label="Tracks in the last 4 weeks" />
+            <StatsMetricCard value={stats.uniqueArtists} label="Artists in saved history" />
+            <StatsMetricCard value={stats.estimatedMinutes ? `${stats.estimatedMinutes}m` : '—'} label="Estimated track duration" />
           </View>
 
           <View style={styles.section}>
@@ -121,13 +113,7 @@ const UserStatsModal = ({ visible, onClose, userProfile, user, recentTracks = []
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Recently played</Text>
             {recentTracks.length ? recentTracks.slice(0, 10).map((track, index) => (
-              <View key={`${track.id}-${index}`} style={styles.trackRow}>
-                <Text style={styles.rank}>{index + 1}</Text>
-                <View style={styles.trackInfo}>
-                  <Text style={styles.trackTitle} numberOfLines={1}>{track.title}</Text>
-                  <Text style={styles.trackArtist} numberOfLines={1}>{track.artist}</Text>
-                </View>
-              </View>
+              <StatsTrackRow key={`${track.id}-${index}`} rank={index + 1} track={track} />
             )) : (
               <Text style={styles.emptyState}>
                 Play some music and your real listening history will appear here.

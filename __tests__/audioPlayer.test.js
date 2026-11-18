@@ -135,7 +135,7 @@ describe('audioPlayer playback requests', () => {
     const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.5);
     const selectedTrack = MOCK_TRACKS[4];
 
-    audioPlayer.setQueueForTrack(selectedTrack, MOCK_TRACKS);
+    audioPlayer.setQueueForTrack(selectedTrack, MOCK_TRACKS, true);
 
     const queue = audioPlayer.getQueue();
     expect(queue[0]).toBe(selectedTrack);
@@ -149,6 +149,16 @@ describe('audioPlayer playback requests', () => {
     );
 
     randomSpy.mockRestore();
+  });
+
+  it('preserves context order and selects the requested track by default', () => {
+    const selectedTrack = MOCK_TRACKS[4];
+
+    audioPlayer.setQueueForTrack(selectedTrack, MOCK_TRACKS);
+
+    expect(audioPlayer.getQueue()).toEqual(MOCK_TRACKS);
+    expect(audioPlayer.getCurrentIndex()).toBe(4);
+    expect(audioPlayer.getQueue()[audioPlayer.getCurrentIndex()]).toBe(selectedTrack);
   });
 
   it('shuffles upcoming tracks and cycles repeat modes', () => {

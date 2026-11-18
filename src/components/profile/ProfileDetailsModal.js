@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import AppIcon from '../icons/AppIcon';
 import SecondaryButton from '../buttons/SecondaryButton';
 import PrimaryButton from '../buttons/PrimaryButton';
+
+
 import {
   Image,
   Modal,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -27,8 +30,17 @@ const ProfileDetailsModal = ({ visible, onClose, user, userProfile, onSaveUserna
   const [editedUsername, setEditedUsername] = useState(username || '');
   const [usernameError, setUsernameError] = useState('');
   const [isSavingUsername, setIsSavingUsername] = useState(false);
+  const usernameSavePending = useRef(false);
+
+
+  const startEditingUsername = () => {
+    setEditedUsername(username || '');
+    setUsernameError('');
+    setIsEditingUsername(true);
+  };
 
   const handleSaveUsername = async () => {
+    if (Platform.OS === 'android' && usernameSavePending.current) return;
     const trimmedUsername = editedUsername.trim();
     if (!/^[a-zA-Z0-9_]{3,30}$/.test(trimmedUsername)) {
       setUsernameError('Use 3-30 letters, numbers, or underscores.');
@@ -39,6 +51,7 @@ const ProfileDetailsModal = ({ visible, onClose, user, userProfile, onSaveUserna
       return;
     }
 
+    if (Platform.OS === 'android') usernameSavePending.current = true;
     setUsernameError('');
     setIsSavingUsername(true);
     try {
@@ -47,6 +60,7 @@ const ProfileDetailsModal = ({ visible, onClose, user, userProfile, onSaveUserna
     } catch (error) {
       setUsernameError(error.message || 'Could not save your username. Please try again.');
     } finally {
+      if (Platform.OS === 'android') usernameSavePending.current = false;
       setIsSavingUsername(false);
     }
   };
@@ -86,6 +100,7 @@ const ProfileDetailsModal = ({ visible, onClose, user, userProfile, onSaveUserna
               <TextInput
                 style={styles.usernameInput}
                 value={editedUsername}
+                editable={Platform.OS === 'android' ? !isSavingUsername : undefined}
                 onChangeText={(text) => {
                   setEditedUsername(text.replace(/\s+/g, ''));
                   setUsernameError('');
@@ -116,14 +131,12 @@ const ProfileDetailsModal = ({ visible, onClose, user, userProfile, onSaveUserna
                 />
               </View>
             </View>
+          ) : Platform.OS === 'android' ? (
+            <SecondaryButton label="Change username" onPress={startEditingUsername} style={styles.changeUsernameNative} />
           ) : (
             <TouchableOpacity
               style={styles.changeUsernameButton}
-              onPress={() => {
-                setEditedUsername(username || '');
-                setUsernameError('');
-                setIsEditingUsername(true);
-              }}
+              onPress={startEditingUsername}
               accessibilityRole="button"
             >
               <Text style={styles.changeUsernameText}>Change username</Text>
@@ -141,6 +154,7 @@ const ProfileDetailsModal = ({ visible, onClose, user, userProfile, onSaveUserna
 
 const styles = StyleSheet.create({
   secondaryButton: { marginTop: 0 },
+  changeUsernameNative: { marginTop: 18 },
   container: {
     flex: 1,
     backgroundColor: '#121212',

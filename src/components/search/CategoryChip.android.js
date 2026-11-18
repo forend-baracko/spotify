@@ -1,7 +1,7 @@
 import React from 'react';
 import { Host, Text } from '@expo/ui';
 import { FilterChip } from '@expo/ui/jetpack-compose';
-import { semantics } from '@expo/ui/jetpack-compose/modifiers';
+import { selectable, semantics } from '@expo/ui/jetpack-compose/modifiers';
 
 const colors = { containerColor: '#30203B', labelColor: '#E5D7EB', selectedContainerColor: '#8E24AA', selectedLabelColor: '#FFFFFF' };
 
@@ -12,7 +12,10 @@ export default function CategoryChip({ category, selected, onPress }) {
         selected={selected}
         onClick={onPress}
         colors={colors}
-        modifiers={[semantics({ contentDescription: `Category: ${category}, ${selected ? 'selected' : 'not selected'}` })]}
+        modifiers={[
+          selectable(selected, onPress, 'tab'),
+          semantics({ contentDescription: `Category: ${category}, ${selected ? 'selected' : 'not selected'}` }),
+        ]}
       >
         <FilterChip.Label><Text>{selected ? `✓ ${category}` : category}</Text></FilterChip.Label>
       </FilterChip>

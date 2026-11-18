@@ -16,6 +16,8 @@ const ICONS = {
   repeat: require('@expo/material-symbols/repeat.xml'),
   repeatOne: require('@expo/material-symbols/repeat_one.xml'),
   favorite: require('@expo/material-symbols/favorite.xml'),
+  save: require('@expo/material-symbols/add_circle.xml'),
+  saved: require('@expo/material-symbols/check_circle.xml'),
   collapse: require('@expo/material-symbols/keyboard_arrow_down.xml'),
   more: require('@expo/material-symbols/more_horiz.xml'),
   queue: require('@expo/material-symbols/queue_music.xml'),

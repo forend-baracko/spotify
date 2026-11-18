@@ -110,6 +110,21 @@ describe('BottomNavBar icon slice', () => {
     expect(onSelectTab).toHaveBeenCalledWith(TABS.CREATE);
   });
 
+  it('moves the selected tab state without changing destination callbacks', async () => {
+    const onSelectTab = jest.fn();
+    await renderBar({ onSelectTab });
+    for (const tab of Object.values(TABS)) {
+      await ReactTestRenderer.act(() => renderer.update(
+        <BottomNavBar activeTab={tab} onSelectTab={onSelectTab} onOpenPlayer={jest.fn()} />
+      ));
+      const buttons = renderer.root.findAllByType(TouchableOpacity);
+      expect(buttons.filter((button) => button.props.accessibilityState?.selected)).toHaveLength(1);
+      expect(buttons.find((button) => button.props.accessibilityState?.selected).props.accessibilityLabel).toBe(tab);
+      await ReactTestRenderer.act(() => buttons.find((button) => button.props.accessibilityLabel === tab).props.onPress());
+    }
+    expect(onSelectTab.mock.calls).toEqual(Object.values(TABS).map((tab) => [tab]));
+  });
+
   it('keeps the mini-player absent when no current track exists', async () => {
     await renderBar();
     const visibleText = renderer.root.findAllByType(Text).map((text) => text.props.children);

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert, Image, Modal, ScrollView, StatusBar, StyleSheet,
-  Text, TouchableOpacity, View,
+  Platform, Text, TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getArtworkSource } from '../../utils/artworkHelper';
@@ -10,6 +10,7 @@ import audioPlayer from '../../services/audioPlayer';
 import AppIcon from '../icons/AppIcon';
 import PlaylistButton from '../buttons/PlaylistButton';
 import SecondaryButton from '../buttons/SecondaryButton';
+import SuggestedTrackRow from './SuggestedTrackRow';
 
 const PlaylistDetailModal = ({
   visible, playlist, onClose, onPlayTrack, currentTrack,
@@ -58,6 +59,10 @@ const PlaylistDetailModal = ({
     audioPlayer.playTrack(tracks[randomIndex]);
   };
   const handleTrackPress = (track) => {
+    if (Platform.OS === 'android' && onPlayTrack) {
+      onPlayTrack(track);
+      return;
+    }
     audioPlayer.setQueueForTrack(track, tracks, false);
     audioPlayer.playTrack(track);
     if (onPlayTrack) onPlayTrack(track);
@@ -180,21 +185,9 @@ const PlaylistDetailModal = ({
               <Text style={styles.source}>From your music catalog</Text>
               {addError ? <Text accessibilityRole="alert" style={styles.error}>{addError}</Text> : null}
               {visibleSuggestions.map((track) => (
-                <View key={`suggestion-${track.id}`} style={styles.suggestionRow}>
-                  <Image source={getArtworkSource(track.artwork)} style={styles.suggestionArtwork} />
-                  <View style={styles.suggestionInfo}>
-                    <Text style={styles.suggestionTitle} numberOfLines={2}>{track.title}</Text>
-                    <Text style={styles.suggestionArtist} numberOfLines={1}>{track.artist}</Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.iconButton} accessibilityRole="button"
-                    accessibilityLabel={`Add ${track.title} to this playlist`}
-                    accessibilityState={{ disabled: !!pendingAdd, busy: pendingAdd === track.id }}
-                    disabled={!!pendingAdd} onPress={pendingAdd ? undefined : () => handleAddSuggestedTrack(track)}
-                  >
-                    <View style={styles.plusCircle}><AppIcon name={pendingAdd === track.id ? 'more' : 'add'} size={18} color="#D0D0D0" /></View>
-                  </TouchableOpacity>
-                </View>
+                <SuggestedTrackRow key={`suggestion-${track.id}`} track={track}
+                  disabled={!!pendingAdd} busy={pendingAdd === track.id}
+                  onPress={pendingAdd ? undefined : () => handleAddSuggestedTrack(track)} />
               ))}
               {isPickingSongs && suggestions.length === 0 && <Text style={styles.source}>All catalog songs are already in this playlist.</Text>}
             </View>

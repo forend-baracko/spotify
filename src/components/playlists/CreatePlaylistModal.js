@@ -1,7 +1,7 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Keyboard, KeyboardAvoidingView, Modal, ScrollView, StyleSheet,
-  Text, TextInput, TouchableOpacity, View,
+  Platform, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppIcon from '../icons/AppIcon';
@@ -18,9 +18,32 @@ const CreatePlaylistModal = ({ visible, onClose, onCreate, userProfile }) => {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
+  const submission = useRef({ epoch: 0, pending: false, mounted: false });
+
+  useEffect(() => {
+    const state = submission.current;
+    state.mounted = true;
+    return () => { state.mounted = false; state.epoch += 1; };
+  }, []);
+
+  useEffect(() => {
+    const state = submission.current;
+    state.epoch += 1;
+    if (Platform.OS === 'android' && !visible) setError('');
+    return () => { state.epoch += 1; };
+  }, [visible]);
+
+  const handleClose = () => {
+    submission.current.epoch += 1;
+    setError('');
+    onClose();
+  };
 
   const handleCreate = async () => {
-    if (!title.trim()) return;
+    const android = Platform.OS === 'android';
+    if (!title.trim() || (android && submission.current.pending)) return;
+    const epoch = ++submission.current.epoch;
+    if (android) submission.current.pending = true;
     const creator = userProfile ? {
       uid: userProfile.uid || null,
       name: userProfile.displayName || userProfile.username || 'You',
@@ -35,30 +58,34 @@ const CreatePlaylistModal = ({ visible, onClose, onCreate, userProfile }) => {
         title: title.trim(), description: description.trim(), icon: selectedEmoji,
         creator, cover: userProfile?.photoURL || null,
       });
+      if (android && epoch !== submission.current.epoch) return;
       setTitle('');
       setDescription('');
       setSelectedEmoji('🎶');
       setShowOptions(false);
       onClose();
     } catch (createError) {
-      console.warn('Could not create playlist:', createError);
-      setError('Could not create playlist. Please try again.');
+      if (!android || epoch === submission.current.epoch) {
+        console.warn('Could not create playlist:', createError);
+        setError('Could not create playlist. Please try again.');
+      }
     } finally {
-      setIsSubmitting(false);
+      if (android) submission.current.pending = false;
+      if (!android || submission.current.mounted) setIsSubmitting(false);
     }
   };
 
   return (
     <Modal
       transparent visible={visible} animationType="slide" statusBarTranslucent
-      onRequestClose={onClose}
+      onRequestClose={Platform.OS === 'android' ? handleClose : onClose}
       onShow={() => titleInput.current?.focus()}
     >
       <KeyboardAvoidingView behavior="height" style={styles.overlay}>
         <View style={[styles.sheet, { marginTop: insets.top + 24, paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={styles.header}>
             <TouchableOpacity
-              onPress={onClose} style={styles.closeButton}
+              onPress={Platform.OS === 'android' ? handleClose : onClose} style={styles.closeButton}
               accessibilityRole="button" accessibilityLabel="Close playlist creation"
             >
               <AppIcon name="close" size={28} color="#FFFFFF" />

@@ -11,6 +11,7 @@ jest.mock('@expo/ui/jetpack-compose', () => {
 });
 jest.mock('@expo/ui/jetpack-compose/modifiers', () => ({
   semantics: (props) => ({ $type: 'semantics', ...props }),
+  selectable: (selected, handler, role) => ({ $type: 'selectable', selected, handler, role }),
 }));
 jest.mock('../src/components/search/CategoryChip', () => jest.requireActual('../src/components/search/CategoryChip.android'));
 const TrackCategoriesBrowser = require('../src/components/search/TrackCategoriesBrowser').default;
@@ -26,6 +27,7 @@ describe('Android category FilterChip', () => {
     expect(chips).toHaveLength(3);
     expect(chips.map((c) => c.findByType('NativeChipLabel').props.children.props.children)).toEqual(['OPM', 'Rap', '✓ Sad']);
     expect(chips.map((c) => c.props.selected)).toEqual([false, false, true]);
+    expect(chips.map((c) => c.props.modifiers.find((m) => m.$type === 'selectable')?.selected)).toEqual([false, false, true]);
     expect(chips[2].props.modifiers).toEqual(expect.arrayContaining([expect.objectContaining({ contentDescription: 'Category: Sad, selected' })]));
     expect(chips[0].props.modifiers).toEqual(expect.arrayContaining([expect.objectContaining({ contentDescription: 'Category: OPM, not selected' })]));
     await ReactTestRenderer.act(() => chips[2].props.onClick());

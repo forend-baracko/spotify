@@ -10,12 +10,14 @@ import {
     Animated,
     Dimensions,
     Share,
+    ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACE } from '../../constants/theme';
 import { getArtworkSource } from '../../utils/artworkHelper';
 import AppIcon from '../icons/AppIcon';
 import SecondaryButton from '../buttons/SecondaryButton';
+import TrackActionItem from './TrackActionItem';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -181,30 +183,17 @@ const TrackActionSheetModal = ({
                     <View style={styles.divider} />
 
                     {/* Action rows */}
-                    <View style={styles.actionsList}>
+                    <ScrollView style={styles.actionsScroll} contentContainerStyle={styles.actionsList}>
                         {actionItems.map((item) => (
-                            <TouchableOpacity
+                            <TrackActionItem
                                 key={item.id}
-                                style={styles.actionRow}
-                                activeOpacity={0.7}
+                                title={item.title}
+                                icon={item.icon}
+                                destructive={item.isDestructive}
                                 onPress={item.onPress}
-                                accessibilityRole="button"
-                                accessibilityLabel={item.title}
-                            >
-                                <View style={styles.actionIconBox}>
-                                    <AppIcon name={item.icon} size={24} color={item.isDestructive ? '#FF6B6B' : '#FFFFFF'} />
-                                </View>
-                                <Text
-                                    style={[
-                                        styles.actionTitle,
-                                        item.isDestructive && styles.destructiveText,
-                                    ]}
-                                >
-                                    {item.title}
-                                </Text>
-                            </TouchableOpacity>
+                            />
                         ))}
-                    </View>
+                    </ScrollView>
 
                     {/* Close button */}
                     <SecondaryButton label="Close" onPress={onClose} />
@@ -271,6 +260,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#2A2A2A',
         marginVertical: SPACE.xs,
     },
+    actionsScroll: { flexShrink: 1 },
     actionsList: {
         marginVertical: SPACE.xs,
     },

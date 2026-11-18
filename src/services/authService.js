@@ -8,6 +8,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { auth, db, isFirebaseConfigured } from './firebaseConfig';
 import { GOOGLE_CONFIG } from '../constants/config';
@@ -63,7 +64,7 @@ export const getReadableAuthError = (errorCode) => {
  * Register a new user with Email and Password
  * Creates Firebase Auth record + Firestore /users/{uid} document
  */
-export const registerWithEmail = async (email, password, displayName) => {
+export const registerWithEmail = async (email, password, displayName, onAuthCreated) => {
     if (!email || !password) {
         throw new Error('Email and password are required.');
     }
@@ -75,11 +76,13 @@ export const registerWithEmail = async (email, password, displayName) => {
         throw new Error('Firebase credentials not configured. Please check your .env file.');
     }
 
+    const releaseRegistration = Platform.OS === 'android' ? beginAndroidRegistration() : null;
     let user;
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
         user = userCredential.user;
     } catch (error) {
+        releaseRegistration?.();
         const readableMessage = getReadableAuthError(error.code);
         const enhancedError = new Error(readableMessage);
         enhancedError.code = error.code;
@@ -87,6 +90,41 @@ export const registerWithEmail = async (email, password, displayName) => {
     }
 
     const profileName = displayName?.trim() || email.trim().split('@')[0];
+    if (Platform.OS === 'android') {
+        try {
+            if (displayName) {
+                try {
+                    const sync = Promise.resolve(updateProfile(user, { displayName: profileName })).catch((error) => {
+                        console.warn('Failed to update the Firebase Auth display name:', error);
+                    });
+                    trackAndroidProfileSync(user.uid, sync);
+                } catch (error) {
+                    console.warn('Failed to update the Firebase Auth display name:', error);
+                }
+            }
+            if (db && user?.uid) {
+                try {
+                    const sync = Promise.resolve(setDoc(doc(db, 'users', user.uid), {
+                        uid: user.uid,
+                        email: email.trim(),
+                        displayName: profileName,
+                        createdAt: serverTimestamp(),
+                        updatedAt: serverTimestamp(),
+                    }, { merge: true })).catch((error) => {
+                        console.warn('Firestore initial user doc creation error:', error);
+                    });
+                    trackAndroidProfileSync(user.uid, sync);
+                } catch (error) {
+                    console.warn('Firestore initial user doc creation error:', error);
+                }
+            }
+            onAuthCreated?.();
+        } finally {
+            releaseRegistration();
+        }
+        return user;
+    }
+
     if (displayName) {
         try {
             updateProfile(user, { displayName: profileName }).catch((error) => {
@@ -141,7 +179,7 @@ export const loginWithEmail = async (email, password) => {
 /**
  * Sign in or Register using Google Account
  */
-export const loginWithGoogle = async () => {
+export const loginWithGoogle = async (canComplete) => {
     if (!isFirebaseConfigured() || !auth) {
         throw new Error('Firebase credentials not configured. Please check your .env file.');
     }
@@ -167,6 +205,9 @@ export const loginWithGoogle = async () => {
             );
         }
 
+        if (Platform.OS === 'android' && canComplete && !canComplete()) {
+            throw new Error('Authentication was cancelled because the account signed out.');
+        }
         const credential = GoogleAuthProvider.credential(idToken);
         const userCredential = await signInWithCredential(auth, credential);
         const user = userCredential.user;
@@ -223,6 +264,33 @@ export const logoutUser = async () => {
 };
 
 const LOCAL_USER_PREFIX = '@spotibai_user_profile_';
+const androidProfileSaveVersions = new Map();
+const androidProfileSavesPending = new Map();
+const androidProfileSaveQueue = new Map();
+const androidProfileSyncs = new Map();
+const androidRegistrationBarriers = new Set();
+
+const beginAndroidRegistration = () => {
+    let resolveBarrier;
+    const barrier = new Promise((resolve) => { resolveBarrier = resolve; });
+    androidRegistrationBarriers.add(barrier);
+    return () => {
+        androidRegistrationBarriers.delete(barrier);
+        resolveBarrier();
+    };
+};
+
+const trackAndroidProfileSync = (uid, promise) => {
+    if (Platform.OS !== 'android') return;
+    const pending = androidProfileSyncs.get(uid) || new Set();
+    pending.add(promise);
+    androidProfileSyncs.set(uid, pending);
+    const cleanup = () => {
+        pending.delete(promise);
+        if (!pending.size && androidProfileSyncs.get(uid) === pending) androidProfileSyncs.delete(uid);
+    };
+    promise.then(cleanup, cleanup);
+};
 
 /**
  * Fetch extended user profile from Cloud Firestore, Firebase Auth, and AsyncStorage.
@@ -230,6 +298,8 @@ const LOCAL_USER_PREFIX = '@spotibai_user_profile_';
  */
 export const getUserProfile = async (uid, authUser) => {
     if (!uid) return null;
+    const saveVersionAtStart = androidProfileSaveVersions.get(uid) || 0;
+    const saveWasPending = (androidProfileSavesPending.get(uid) || 0) > 0;
 
     // 1. First, read local cache for instant zero-latency retrieval
     let localCached = null;
@@ -258,8 +328,10 @@ export const getUserProfile = async (uid, authUser) => {
         }
     }
 
-    // 3. Fallback to Firebase Auth displayName
-    const firebaseDisplayName = authUser?.displayName || auth?.currentUser?.displayName || null;
+    // Never use a different signed-in account as this profile's fallback on Android.
+    const suppliedUser = Platform.OS === 'android' && authUser?.uid !== uid ? null : authUser;
+    const currentUser = Platform.OS === 'android' && auth?.currentUser?.uid !== uid ? null : auth?.currentUser;
+    const firebaseDisplayName = suppliedUser?.displayName || currentUser?.displayName || null;
 
     // 4. Resolve username with priority: Firestore > local cache > Firebase Auth
     const resolvedUsername =
@@ -278,8 +350,8 @@ export const getUserProfile = async (uid, authUser) => {
         null;
 
     const email =
-        authUser?.email ||
-        auth?.currentUser?.email ||
+        suppliedUser?.email ||
+        currentUser?.email ||
         firestoreData?.email ||
         localCached?.email ||
         null;
@@ -292,8 +364,8 @@ export const getUserProfile = async (uid, authUser) => {
         (email ? email.split('@')[0] : 'User');
 
     const photoURL =
-        authUser?.photoURL ||
-        auth?.currentUser?.photoURL ||
+        suppliedUser?.photoURL ||
+        currentUser?.photoURL ||
         firestoreData?.photoURL ||
         localCached?.photoURL ||
         null;
@@ -310,17 +382,22 @@ export const getUserProfile = async (uid, authUser) => {
         displayName,
     };
 
+    if (Platform.OS === 'android' && (saveWasPending || (androidProfileSavesPending.get(uid) || 0) > 0 || auth?.currentUser?.uid !== uid || (androidProfileSaveVersions.get(uid) || 0) !== saveVersionAtStart)) return profile;
+
     // Keep AsyncStorage updated
     try {
-        await AsyncStorage.setItem(`${LOCAL_USER_PREFIX}${uid}`, JSON.stringify(profile));
+        const cacheSync = AsyncStorage.setItem(`${LOCAL_USER_PREFIX}${uid}`, JSON.stringify(profile));
+        trackAndroidProfileSync(uid, cacheSync.catch(() => {}));
+        await cacheSync;
     } catch (e) {
         // ignore cache write warning
     }
 
     // If Firestore was missing this user's username but we resolved one from cache/auth,
     // automatically sync it back to Firestore so it is permanently preserved in Firebase
+    if (Platform.OS === 'android' && (saveWasPending || (androidProfileSavesPending.get(uid) || 0) > 0 || auth?.currentUser?.uid !== uid || (androidProfileSaveVersions.get(uid) || 0) !== saveVersionAtStart)) return profile;
     if (db && resolvedUsername && (!firestoreData || !firestoreData.username)) {
-        setDoc(
+        const sync = setDoc(
             doc(db, 'users', uid),
             {
                 uid,
@@ -334,11 +411,13 @@ export const getUserProfile = async (uid, authUser) => {
         ).catch((err) => {
             console.warn('Auto-sync username to Firestore error:', err);
         });
+        trackAndroidProfileSync(uid, sync);
     }
 
     // Also sync Firebase Auth currentUser displayName if not set
-    if (auth?.currentUser && resolvedUsername && auth.currentUser.displayName !== resolvedUsername) {
-        updateProfile(auth.currentUser, { displayName: resolvedUsername }).catch(() => {});
+    if (auth?.currentUser && (Platform.OS !== 'android' || auth.currentUser.uid === uid) && resolvedUsername && auth.currentUser.displayName !== resolvedUsername) {
+        const sync = updateProfile(auth.currentUser, { displayName: resolvedUsername }).catch(() => {});
+        trackAndroidProfileSync(uid, sync);
     }
 
     return profile;
@@ -347,7 +426,7 @@ export const getUserProfile = async (uid, authUser) => {
 /**
  * Save user username and profile data to Firebase (Firestore + Auth) and AsyncStorage
  */
-export const saveUserUsername = async (
+const saveUserUsernameImpl = async (
     uid,
     username,
     additionalData = {},
@@ -356,10 +435,14 @@ export const saveUserUsername = async (
     if (!uid) {
         throw new Error('User ID is required to save username.');
     }
+    if (Platform.OS === 'android' && auth?.currentUser?.uid !== uid) {
+        throw new Error('The account changed before the username could be saved.');
+    }
     const trimmed = (username || '').trim();
     if (!trimmed) {
         throw new Error('Please enter a username.');
     }
+    if (Platform.OS === 'android') androidProfileSaveVersions.set(uid, (androidProfileSaveVersions.get(uid) || 0) + 1);
 
     const email = auth?.currentUser?.email || additionalData.email || '';
     const photoURL = auth?.currentUser?.photoURL || additionalData.photoURL || null;
@@ -392,11 +475,13 @@ export const saveUserUsername = async (
     }
 
     // 2. Save to Firebase Auth profile
-    if (auth?.currentUser) {
+    if (auth?.currentUser && (Platform.OS !== 'android' || auth.currentUser.uid === uid)) {
         try {
-            await updateProfile(auth.currentUser, { displayName: trimmed });
-            if (auth.currentUser.reload) {
-                await auth.currentUser.reload().catch(() => {});
+            const userToUpdate = auth.currentUser;
+            await updateProfile(userToUpdate, { displayName: trimmed });
+            const userToReload = Platform.OS === 'android' ? userToUpdate : auth.currentUser;
+            if (userToReload.reload) {
+                await userToReload.reload().catch(() => {});
             }
         } catch (err) {
             console.warn('Firebase Auth updateProfile warning:', err);
@@ -422,4 +507,30 @@ export const saveUserUsername = async (
     }
 
     return profileData;
+};
+
+export const saveUserUsername = async (uid, username, additionalData, options) => {
+    const trackPending = Platform.OS === 'android' && Boolean(uid);
+    if (trackPending) androidProfileSavesPending.set(uid, (androidProfileSavesPending.get(uid) || 0) + 1);
+    const previous = trackPending ? androidProfileSaveQueue.get(uid) : null;
+    const barriers = trackPending ? [...androidRegistrationBarriers] : [];
+    const startSave = () => {
+        const pendingSyncs = trackPending ? [...(androidProfileSyncs.get(uid) || [])] : [];
+        return pendingSyncs.length
+            ? Promise.all(pendingSyncs).then(() => saveUserUsernameImpl(uid, username, additionalData, options))
+            : saveUserUsernameImpl(uid, username, additionalData, options);
+    };
+    const prerequisites = [...barriers, ...(previous ? [previous.catch(() => {})] : [])];
+    const operation = prerequisites.length ? Promise.all(prerequisites).then(startSave) : startSave();
+    if (trackPending) androidProfileSaveQueue.set(uid, operation);
+    try {
+        return await operation;
+    } finally {
+        if (trackPending) {
+            if (androidProfileSaveQueue.get(uid) === operation) androidProfileSaveQueue.delete(uid);
+            const remaining = (androidProfileSavesPending.get(uid) || 1) - 1;
+            if (remaining) androidProfileSavesPending.set(uid, remaining);
+            else androidProfileSavesPending.delete(uid);
+        }
+    }
 };

@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACE } from '../../constants/theme';
-import AppIcon from '../icons/AppIcon';
+import ProfileDrawerItem from './ProfileDrawerItem';
 
 const DRAWER_WIDTH = Math.min(Dimensions.get('window').width * 0.9, 430);
 
@@ -106,27 +106,15 @@ const ProfileDrawer = ({
             <View style={styles.divider} />
 
             {items.map((item) => (
-              <TouchableOpacity
+              <ProfileDrawerItem
                 key={item.key}
-                style={styles.menuItem}
+                label={item.label}
+                icon={item.icon}
                 onPress={() => {
                   onClose();
                   item.onPress?.();
                 }}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-              >
-                <View style={styles.menuIconSlot}>
-                  <AppIcon name={item.icon} size={24} color="#FFFFFF" />
-                </View>
-                <Text style={styles.menuLabel}>{item.label}</Text>
-                {item.badge ? (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{item.badge}</Text>
-                  </View>
-                ) : null}
-                {item.hasUpdate ? <View style={styles.updateDot} /> : null}
-              </TouchableOpacity>
+              />
             ))}
 
             <View style={styles.divider} />

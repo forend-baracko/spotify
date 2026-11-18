@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { Linking, Text, TouchableOpacity } from 'react-native';
+import { Linking, Platform, Text, TouchableOpacity } from 'react-native';
 import GeminiDJ from '../src/components/search/GeminiDJ';
 
 const mockCreateGeminiDjSet = jest.fn();
@@ -18,6 +18,87 @@ jest.mock('../src/services/geminiService', () => ({
 describe('GeminiDJ', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCreateGeminiDjSet.mockReset();
+  });
+
+  describe('Android request invalidation', () => {
+    let originalPlatform;
+    beforeEach(() => { originalPlatform = Platform.OS; Platform.OS = 'android'; });
+    afterEach(() => { Platform.OS = originalPlatform; });
+
+  it('clears an existing pick when the prompt or category changes', async () => {
+    const tracks = [{ id: 'track-1', title: 'First', artist: 'One', categories: ['Sad'] }];
+    mockCreateGeminiDjSet.mockResolvedValue({ title: 'Pick', trackId: 'track-1' });
+    let renderer;
+    await ReactTestRenderer.act(async () => { renderer = ReactTestRenderer.create(<GeminiDJ tracks={tracks} onStartSet={jest.fn()} />); await Promise.resolve(); await Promise.resolve(); });
+    const input = () => renderer.root.findByProps({ accessibilityLabel: 'Describe the music you want your AI DJ to pick' });
+    const pick = () => renderer.root.findAllByType(TouchableOpacity).find((button) => button.findAllByType(Text).some((text) => text.props.children === 'Pick my track'));
+    await ReactTestRenderer.act(() => input().props.onChangeText('first mood'));
+    await ReactTestRenderer.act(() => pick().props.onPress());
+    expect(renderer.root.findAllByType(TouchableOpacity).filter((node) => node.props.accessibilityLabel === 'Play First')).toHaveLength(1);
+    await ReactTestRenderer.act(() => input().props.onChangeText('different mood'));
+    expect(renderer.root.findAllByType(TouchableOpacity).filter((node) => node.props.accessibilityLabel === 'Play First')).toHaveLength(0);
+    await ReactTestRenderer.act(() => pick().props.onPress());
+    expect(renderer.root.findAllByType(TouchableOpacity).filter((node) => node.props.accessibilityLabel === 'Play First')).toHaveLength(1);
+    await ReactTestRenderer.act(() => renderer.root.findByProps({ accessibilityLabel: 'Category: Sad' }).props.onPress());
+    expect(renderer.root.findAllByType(TouchableOpacity).filter((node) => node.props.accessibilityLabel === 'Play First')).toHaveLength(0);
+    await ReactTestRenderer.act(() => renderer.unmount());
+  });
+
+  it('ignores stale pending results after the prompt changes', async () => {
+    let resolveOld;
+    let resolveNew;
+    mockCreateGeminiDjSet
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveNew = resolve; }));
+    const tracks = [{ id: 'track-1', title: 'First', artist: 'One' }];
+    let renderer;
+    await ReactTestRenderer.act(async () => { renderer = ReactTestRenderer.create(<GeminiDJ tracks={tracks} onStartSet={jest.fn()} />); await Promise.resolve(); await Promise.resolve(); });
+    const input = renderer.root.findByProps({ accessibilityLabel: 'Describe the music you want your AI DJ to pick' });
+    await ReactTestRenderer.act(() => input.props.onChangeText('old mood'));
+    const pick = renderer.root.findAllByType(TouchableOpacity).find((button) => button.findAllByType(Text).some((text) => text.props.children === 'Pick my track'));
+    await ReactTestRenderer.act(() => { pick.props.onPress(); });
+    await ReactTestRenderer.act(() => input.props.onChangeText('new mood'));
+    const nextPick = renderer.root.findAllByType(TouchableOpacity).find((button) => button.props.accessibilityLabel === 'Pick my track');
+    await ReactTestRenderer.act(() => { nextPick.props.onPress(); });
+    await ReactTestRenderer.act(async () => { resolveOld({ title: 'Old pick', trackId: 'track-1' }); await Promise.resolve(); });
+    expect(renderer.root.findAllByType(TouchableOpacity).filter((node) => node.props.accessibilityLabel === 'Play First')).toHaveLength(0);
+    expect(renderer.root.findAllByType(TouchableOpacity).find((button) => button.props.accessibilityLabel === 'Pick my track').props.accessibilityState.busy).toBe(true);
+    await ReactTestRenderer.act(async () => { resolveNew({ title: 'New pick', trackId: 'track-1' }); await Promise.resolve(); });
+    expect(renderer.root.findAllByType(TouchableOpacity).filter((node) => node.props.accessibilityLabel === 'Play First')).toHaveLength(1);
+    await ReactTestRenderer.act(() => renderer.unmount());
+  });
+
+  });
+
+  it('limits the generated queue to the pick and six other tracks', async () => {
+    const tracks = Array.from({ length: 12 }, (_, i) => ({ id: `track-${i}`, title: `Song ${i}`, artist: 'Artist' }));
+    const onStartSet = jest.fn();
+    mockCreateGeminiDjSet.mockResolvedValue({ title: 'Pick', trackId: 'track-3' });
+    let renderer;
+    await ReactTestRenderer.act(async () => { renderer = ReactTestRenderer.create(<GeminiDJ tracks={tracks} onStartSet={onStartSet} />); await Promise.resolve(); await Promise.resolve(); });
+    await ReactTestRenderer.act(() => renderer.root.findByProps({ accessibilityLabel: 'Describe the music you want your AI DJ to pick' }).props.onChangeText('mood'));
+    const pick = renderer.root.findAllByType(TouchableOpacity).find((button) => button.props.accessibilityLabel === 'Pick my track');
+    await ReactTestRenderer.act(() => pick.props.onPress());
+    const play = renderer.root.findAllByType(TouchableOpacity).find((button) => button.props.accessibilityLabel === 'Play Song 3');
+    await ReactTestRenderer.act(() => play.props.onPress());
+    const queue = onStartSet.mock.calls[0][0];
+    expect(queue).toHaveLength(7);
+    expect(queue[0]).toBe(tracks[3]);
+    expect(new Set(queue.map((track) => track.id)).size).toBe(7);
+    await ReactTestRenderer.act(() => renderer.unmount());
+  });
+
+  it('does not offer playback when Gemini returns an unknown track', async () => {
+    mockCreateGeminiDjSet.mockResolvedValue({ title: 'Pick', trackId: 'missing' });
+    let renderer;
+    await ReactTestRenderer.act(async () => { renderer = ReactTestRenderer.create(<GeminiDJ tracks={[{ id: 'track-1', title: 'First', artist: 'One' }]} onStartSet={jest.fn()} />); await Promise.resolve(); await Promise.resolve(); });
+    await ReactTestRenderer.act(() => renderer.root.findByProps({ accessibilityLabel: 'Describe the music you want your AI DJ to pick' }).props.onChangeText('mood'));
+    const pick = renderer.root.findAllByType(TouchableOpacity).find((button) => button.props.accessibilityLabel === 'Pick my track');
+    await ReactTestRenderer.act(() => pick.props.onPress());
+    expect(renderer.root.findAllByType(Text).some((node) => node.props.children === 'Gemini could not match a track to the available catalog.')).toBe(true);
+    expect(renderer.root.findAllByType(TouchableOpacity).some((button) => button.props.accessibilityLabel === 'Play First')).toBe(false);
+    await ReactTestRenderer.act(() => renderer.unmount());
   });
 
   it('starts with the Gemini pick followed by the available tracks in randomized order', async () => {

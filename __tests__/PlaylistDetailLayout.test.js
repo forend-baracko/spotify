@@ -1,11 +1,13 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { Text, TouchableOpacity } from 'react-native';
+import { Alert, Platform, Text, TouchableOpacity } from 'react-native';
 
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 20, left: 0, right: 0 }) }));
 jest.mock('../src/services/audioPlayer', () => ({ __esModule: true, default: { playPlaylist: jest.fn(), setQueueForTrack: jest.fn(), playTrack: jest.fn() } }));
 require('../test-utils/expoIcons');
 const PlaylistDetailModal = require('../src/components/playlists/PlaylistDetailModal').default;
+const SwipeableTrackRow = require('../src/components/player/SwipeableTrackRow').default;
+const audioPlayer = require('../src/services/audioPlayer').default;
 const first = { id: 'one', title: 'First song', artist: 'First artist' };
 const second = { id: 'two', title: 'Second song', artist: 'Second artist' };
 const emptyPlaylist = { id: 'playlist-1', title: 'Road trip', tracks: [] };
@@ -17,6 +19,44 @@ describe('reference-based playlist detail layout', () => {
   afterEach(async () => {
     if (renderer) await ReactTestRenderer.act(() => renderer.unmount());
     renderer = null;
+    jest.clearAllMocks();
+  });
+
+  it('delegates playlist track playback once to the screen callback', async () => {
+    const platform = Platform.OS;
+    Platform.OS = 'android';
+    try {
+    const onPlayTrack = jest.fn((track) => audioPlayer.playTrack(track));
+    await render({ playlist: { ...emptyPlaylist, tracks: [first] }, onPlayTrack });
+    await ReactTestRenderer.act(() => renderer.root.findByType(SwipeableTrackRow).props.onPress());
+    expect(onPlayTrack).toHaveBeenCalledWith(first);
+    expect(audioPlayer.playTrack).toHaveBeenCalledTimes(1);
+    expect(audioPlayer.setQueueForTrack).not.toHaveBeenCalled();
+    } finally { Platform.OS = platform; }
+  });
+
+  it('retains playlist playback when no screen callback is supplied', async () => {
+    await render({ playlist: { ...emptyPlaylist, tracks: [first] } });
+    await ReactTestRenderer.act(() => renderer.root.findByType(SwipeableTrackRow).props.onPress());
+    expect(audioPlayer.setQueueForTrack).toHaveBeenCalledWith(first, [first], false);
+    expect(audioPlayer.playTrack).toHaveBeenCalledWith(first);
+  });
+
+  it('only deletes the current playlist after the destructive option is chosen', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    try {
+      const onDeletePlaylist = jest.fn();
+      const onClose = jest.fn();
+      await render({ playlist: { ...emptyPlaylist, tracks: [first] }, onDeletePlaylist, onClose });
+      await ReactTestRenderer.act(() => button('Playlist options').props.onPress());
+      expect(onDeletePlaylist).not.toHaveBeenCalled();
+      const actions = alert.mock.calls[0][2];
+      const remove = actions.find((action) => action.style === 'destructive');
+      expect(remove).toBeDefined();
+      await ReactTestRenderer.act(() => remove.onPress());
+      expect(onDeletePlaylist).toHaveBeenCalledWith('playlist-1');
+      expect(onClose).toHaveBeenCalledTimes(1);
+    } finally { alert.mockRestore(); }
   });
 
   it('uses real catalog suggestions and adds the exact track to this playlist, not playback', async () => {

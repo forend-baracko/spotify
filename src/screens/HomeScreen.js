@@ -14,6 +14,7 @@ import {
   Keyboard,
   Alert,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import audioPlayer, { REPEAT_MODE } from '../services/audioPlayer';
@@ -21,12 +22,19 @@ import { MOCK_TRACKS } from '../services/audiomackService';
 import { searchAudiusTracks } from '../services/audiusService';
 import { getArtworkSource } from '../utils/artworkHelper';
 import BottomNavBar, { TABS } from '../components/navigation/BottomNavBar';
+import HomeFilterChip from '../components/navigation/HomeFilterChip';
+import HomeShortcutCard from '../components/navigation/HomeShortcutCard';
+import HomeFeaturedCard from '../components/navigation/HomeFeaturedCard';
 import AppIcon from '../components/icons/AppIcon';
 import GeminiDJ from '../components/search/GeminiDJ';
+import SearchCategoryCard from '../components/search/SearchCategoryCard';
+import SearchResultRow from '../components/search/SearchResultRow';
 import { CreateView, LibraryView } from '../components/playlists/LibraryAndCreateViews';
 import PlaylistDetailModal from '../components/playlists/PlaylistDetailModal';
 import AddToPlaylistModal from '../components/playlists/AddToPlaylistModal';
 import SwipeableTrackRow from '../components/player/SwipeableTrackRow';
+import PlaybackProgress from '../components/player/PlaybackProgress';
+import PlayerArtwork from '../components/player/PlayerArtwork';
 import QueueModal from '../components/player/QueueModal';
 import TrackActionSheetModal from '../components/player/TrackActionSheetModal';
 import ProfileDrawer from '../components/profile/ProfileDrawer';
@@ -110,6 +118,8 @@ const formatTime = (secs) => {
 };
 
 const HomeScreen = ({ navigation }) => {
+  const { height: windowHeight } = useWindowDimensions();
+  const playerArtworkSpacing = Math.max(12, Math.min(70, (windowHeight - 700) * 0.4));
   const authContextValue = useContext(ResolvedAuthContext);
   const musicContext = useMusic();
   const musicCatalog = musicContext.availableTracks || MOCK_TRACKS;
@@ -308,7 +318,7 @@ const HomeScreen = ({ navigation }) => {
 
   const handleAddTrackToPlaylist = async (playlistId, track) => {
     await musicContext.addTrackToPlaylist(playlistId, track);
-    setIsAddToPlaylistOpen(false);
+    if (Platform.OS !== 'android') setIsAddToPlaylistOpen(false);
   };
 
   const handleTogglePlay = () => {
@@ -445,11 +455,6 @@ const HomeScreen = ({ navigation }) => {
       setSearchPage((prev) => prev + 1);
     }
   };
-  const progressPercent = Math.min(
-    100,
-    Math.max(0, ((currentTime || 0) / (duration || 230)) * 100)
-  );
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#121212" />
@@ -458,6 +463,7 @@ const HomeScreen = ({ navigation }) => {
         {activeTab === TABS.SEARCH ? (
           <ScrollView
             contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
             onScroll={handleSearchScroll}
             scrollEventThrottle={32}
           >
@@ -517,16 +523,12 @@ const HomeScreen = ({ navigation }) => {
                     <Text style={styles.homeSectionTitle}>{section.title}</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                       {section.cards.map((card, index) => (
-                        <TouchableOpacity
+                        <HomeFeaturedCard
                           key={card.id}
-                          style={styles.homeFeaturedCard}
+                          image={card.image}
+                          title={card.subtitle}
                           onPress={() => handlePlayTrack(musicCatalog[index % musicCatalog.length])}
-                        >
-                          <Image source={{ uri: card.image }} style={styles.homeFeaturedImage} />
-                          <Text style={styles.homeFeaturedTitle} numberOfLines={2}>
-                            {card.subtitle}
-                          </Text>
-                        </TouchableOpacity>
+                        />
                       ))}
                     </ScrollView>
                   </View>
@@ -548,39 +550,14 @@ const HomeScreen = ({ navigation }) => {
                   <Text style={styles.searchResultsHeading}>Searching Audius…</Text>
                 ) : null}
                 {searchResults.length ? searchResults.map((track) => {
-                  const artwork = getArtworkSource(track.artwork);
                   return (
-                    <View key={track.id} style={styles.searchResultRow}>
-                      <TouchableOpacity
-                        style={styles.searchResultMain}
-                        activeOpacity={0.75}
-                        onPress={() => handlePlayTrack(track, searchResults)}
-                      >
-                        {artwork ? (
-                          <Image source={artwork} style={styles.searchResultArtwork} />
-                        ) : (
-                          <View style={[styles.searchResultArtwork, styles.placeholderBox]}>
-                            <Text style={styles.placeholderSymbol}>♪</Text>
-                          </View>
-                        )}
-                        <View style={styles.searchResultMeta}>
-                          <Text style={styles.searchResultTitle} numberOfLines={1}>{track.title}</Text>
-                          <Text style={styles.searchResultSubtitle} numberOfLines={1}>
-                            {track.artist} · {track.source === 'audius'
-                              ? 'Audius · Full track'
-                              : track.isPreview ? 'Preview' : 'Full track'}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.songMoreButton}
-                        onPress={() => handleOpenTrackActions(track)}
-                        accessibilityLabel={`More options for ${track.title}`}
-                        hitSlop={8}
-                      >
-                        <AppIcon name="more" size={22} color="#B3B3B3" />
-                      </TouchableOpacity>
-                    </View>
+                    <SearchResultRow
+                      key={track.id}
+                      track={track}
+                      artwork={getArtworkSource(track.artwork)}
+                      onPlay={() => handlePlayTrack(track, searchResults)}
+                      onMore={() => handleOpenTrackActions(track)}
+                    />
                   );
                 }) : isMusicSearchLoading ? null : (
                   <Text style={styles.noRecommendedTracks}>No results found. Try another search.</Text>
@@ -598,19 +575,16 @@ const HomeScreen = ({ navigation }) => {
             ) : (
               <View style={styles.categoryGrid}>
                 {SEARCH_CATEGORIES.map((cat) => (
-                  <TouchableOpacity
+                  <SearchCategoryCard
                     key={cat.id}
-                    style={[styles.categoryCard, { backgroundColor: cat.color }]}
+                    title={cat.title}
+                    color={cat.color}
+                    image={cat.image}
                     onPress={() => {
                       setSearchQuery('');
                       setSearchCategory(cat.id);
                     }}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Browse ${cat.title}`}
-                  >
-                    <Text style={styles.categoryTitle}>{cat.title}</Text>
-                    <Image source={{ uri: cat.image }} style={styles.categoryImage} />
-                  </TouchableOpacity>
+                  />
                 ))}
               </View>
             )}
@@ -655,23 +629,16 @@ const HomeScreen = ({ navigation }) => {
               {['All', 'Music'].map((filter) => {
                 const isActive = homeFilter === filter;
                 return (
-                  <TouchableOpacity
+                  <HomeFilterChip
                     key={filter}
-                    style={[styles.homeFilterChip, isActive && styles.homeFilterChipActive]}
+                    label={filter}
+                    selected={isActive}
                     onPress={() => {
                       setHomeFilter(filter);
                       setRecommendedPage(1);
                     }}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isActive }}
                     accessibilityLabel={filter === 'Music' ? 'Show all music recommendations' : 'Show all recommendations'}
-                    activeOpacity={0.65}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text style={[styles.homeFilterText, isActive && styles.homeFilterTextActive]}>
-                      {filter}
-                    </Text>
-                  </TouchableOpacity>
+                  />
                 );
               })}
               <TouchableOpacity
@@ -712,10 +679,10 @@ const HomeScreen = ({ navigation }) => {
 
             <View style={[styles.homeShortcutGrid, searchQuery.trim() && styles.dimmedWhileSearching]}>
               {homePlaylistCards.map((item, index) => (
-                <TouchableOpacity
+                <HomeShortcutCard
                   key={item.id}
-                  style={styles.homeShortcut}
-                  activeOpacity={0.8}
+                  title={item.title}
+                  image={typeof item.image === 'string' ? { uri: item.image } : item.image}
                   onPress={() => {
                     if (item.playlist) {
                       setSelectedPlaylistId(item.playlist.id);
@@ -723,21 +690,7 @@ const HomeScreen = ({ navigation }) => {
                       handlePlayTrack(musicCatalog[index % musicCatalog.length]);
                     }
                   }}
-                >
-                  {item.image ? (
-                    <Image
-                      source={typeof item.image === 'string' ? { uri: item.image } : item.image}
-                      style={styles.homeShortcutImage}
-                    />
-                  ) : (
-                    <View style={[styles.homeShortcutImage, styles.homeShortcutFallback]}>
-                      <Text style={styles.homeShortcutFallbackText}>♫</Text>
-                    </View>
-                  )}
-                  <Text style={styles.homeShortcutTitle} numberOfLines={2}>
-                    {item.title}
-                  </Text>
-                </TouchableOpacity>
+                />
               ))}
             </View>
 
@@ -756,17 +709,12 @@ const HomeScreen = ({ navigation }) => {
                     contentContainerStyle={styles.homeFeaturedRow}
                   >
                     {section.cards.map((card, index) => (
-                      <TouchableOpacity
+                      <HomeFeaturedCard
                         key={card.id}
-                        style={styles.homeFeaturedCard}
-                        activeOpacity={0.8}
+                        image={card.image}
+                        title={card.subtitle}
                         onPress={() => handlePlayTrack(musicCatalog[index % musicCatalog.length])}
-                      >
-                        <Image source={{ uri: card.image }} style={styles.homeFeaturedImage} />
-                        <Text style={styles.homeFeaturedTitle} numberOfLines={2}>
-                          {card.subtitle}
-                        </Text>
-                      </TouchableOpacity>
+                      />
                     ))}
                   </ScrollView>
                 </View>
@@ -920,7 +868,8 @@ const HomeScreen = ({ navigation }) => {
         animationType="slide"
         onRequestClose={() => setIsPlayerModalOpen(false)}
       >
-        <SafeAreaView style={styles.fullPlayerBackground}>
+        <SafeAreaView testID="full-player-surface" style={[styles.fullPlayerBackground, Platform.OS === 'android' && styles.fullPlayerAndroidBackground]}>
+          {Platform.OS === 'android' && <StatusBar barStyle="light-content" backgroundColor="#A73529" />}
           <ScrollView contentContainerStyle={styles.fullPlayerScroll} showsVerticalScrollIndicator={false}>
             <View style={styles.fullPlayerHeader}>
               <TouchableOpacity
@@ -938,6 +887,9 @@ const HomeScreen = ({ navigation }) => {
 
               <TouchableOpacity
                 style={styles.headerBtnRight}
+                onPress={Platform.OS === 'android' ? () => currentTrack && handleOpenTrackActions(currentTrack) : undefined}
+                accessibilityRole="button"
+                accessibilityLabel="More options for current track"
                 activeOpacity={0.6}
                 hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
               >
@@ -945,17 +897,11 @@ const HomeScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.artworkWrapper}>
-              {playerArtwork ? (
-                <Image source={playerArtwork} style={styles.fullArtworkImage} />
-              ) : (
-                <View style={[styles.fullArtworkImage, styles.placeholderBox]}>
-                  <Text style={styles.placeholderSymbolLarge}>♪</Text>
-                </View>
-              )}
+            <View style={[styles.artworkWrapper, Platform.OS === 'android' && { marginTop: playerArtworkSpacing, marginBottom: playerArtworkSpacing }]}>
+              <PlayerArtwork artwork={playerArtwork} />
             </View>
 
-            <View style={styles.trackDetailsRow}>
+            <View style={[styles.trackDetailsRow, Platform.OS === 'android' && styles.trackDetailsAndroid]}>
               <View style={styles.trackTextGroup}>
                 <Text style={styles.fullTrackTitle} numberOfLines={1}>
                   {currentTrack?.title || 'Na Para Bang'}
@@ -972,35 +918,18 @@ const HomeScreen = ({ navigation }) => {
                 accessibilityState={{ selected: isLiked }}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <AppIcon name="favorite" size={28} color={isLiked ? '#1DB954' : '#FFFFFF'} />
+                <AppIcon name={Platform.OS === 'android' ? (isLiked ? 'saved' : 'save') : 'favorite'} size={Platform.OS === 'android' ? 30 : 28} color={isLiked ? '#1DB954' : '#FFFFFF'} />
                 {isLiked && <View style={styles.activeIconIndicator} />}
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity
-              activeOpacity={1}
-              style={styles.scrubberContainer}
-              onPress={(evt) => {
-                const clickX = evt.nativeEvent.locationX;
-                const totalWidth = 320;
-                const pct = Math.max(0, Math.min(1, clickX / totalWidth));
-                const targetSecs = pct * duration;
-                if (typeof audioPlayer?.seekTo === 'function') {
-                  audioPlayer.seekTo(targetSecs);
-                }
-              }}
-            >
-              <View style={styles.scrubberTrackBg}>
-                <View style={[styles.scrubberTrackFill, { width: `${progressPercent}%` }]} />
-                <View style={[styles.scrubberKnob, { left: `${progressPercent}%` }]} />
-              </View>
-              <View style={styles.timeLabelRow}>
-                <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
-                <Text style={styles.timeText}>
-                  -{formatTime(Math.max(0, duration - currentTime))}
-                </Text>
-              </View>
-            </TouchableOpacity>
+            <PlaybackProgress
+              trackId={currentTrack?.id}
+              currentTime={currentTime}
+              duration={duration}
+              formatTime={formatTime}
+              onSeek={(seconds) => audioPlayer?.seekTo?.(seconds)}
+            />
 
             <View style={styles.controlsRow}>
               <TouchableOpacity
@@ -1055,14 +984,14 @@ const HomeScreen = ({ navigation }) => {
                 <AppIcon name="devices" size={22} color="#FFFFFF" />
               </TouchableOpacity>
 
-              <View style={styles.fromBadge}>
+              {Platform.OS !== 'android' && <View style={styles.fromBadge}>
                 <View style={styles.badgeAvatar}>
                   <Text style={styles.badgeAvatarText}>
                     {userName.charAt(0).toUpperCase()}
                   </Text>
                 </View>
-                <Text style={styles.badgeText}>From {userName}</Text>
-              </View>
+                <Text style={styles.badgeText} numberOfLines={1} ellipsizeMode="tail">From {userName}</Text>
+              </View>}
 
               <View style={styles.actionRightGroup}>
                 <TouchableOpacity style={styles.actionIconBtn}>
@@ -1081,30 +1010,35 @@ const HomeScreen = ({ navigation }) => {
             </View>
 
             <View style={styles.aboutArtistContainer}>
-              <Image
-                source={{
-                  uri:
-                    currentTrack?.artistImage ||
-                    'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&q=80',
-                }}
-                style={styles.artistBannerImage}
-              />
+              {currentTrack?.artistImage || Platform.OS !== 'android' ? (
+                <Image source={{ uri: currentTrack?.artistImage || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&q=80' }} style={styles.artistBannerImage} />
+              ) : (
+                <View style={[styles.artistBannerImage, styles.placeholderBox]} />
+              )}
               <View style={styles.artistInfoOverlay}>
                 <Text style={styles.aboutArtistHeader}>About the artist</Text>
                 <Text style={styles.artistNameTitle}>
-                  {currentTrack?.artist || 'Mariah Deborah'}
+                  {currentTrack?.artist || (Platform.OS === 'android' ? 'Artist' : 'Mariah Deborah')}
                 </Text>
                 <View style={styles.listenersRow}>
-                  <Text style={styles.listenersText}>1,248,590 monthly listeners</Text>
+                  {Platform.OS !== 'android' && <Text style={styles.listenersText}>1,248,590 monthly listeners</Text>}
                   <TouchableOpacity style={styles.followButton}>
                     <Text style={styles.followButtonText}>Follow</Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.artistBioText} numberOfLines={3}>
-                  Mariah Deborah is an independent indie-pop singer-songwriter known for her soulful acoustic arrangements and heartfelt lyrical storytelling.
-                </Text>
+                {Platform.OS !== 'android' ? (
+                  <Text style={styles.artistBioText} numberOfLines={3}>
+                    Mariah Deborah is an independent indie-pop singer-songwriter known for her soulful acoustic arrangements and heartfelt lyrical storytelling.
+                  </Text>
+                ) : typeof currentTrack?.artistBio === 'string' && !!currentTrack.artistBio.trim() && (
+                  <Text style={styles.artistBioText} numberOfLines={3}>{currentTrack.artistBio}</Text>
+                )}
               </View>
             </View>
+            {Platform.OS === 'android' && <View style={styles.fromBadge}>
+              <View style={styles.badgeAvatar}><Text style={styles.badgeAvatarText}>{userName.charAt(0).toUpperCase()}</Text></View>
+              <Text style={styles.badgeText} numberOfLines={1} ellipsizeMode="tail">From {userName}</Text>
+            </View>}
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -1827,6 +1761,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#3D4853',
   },
+  fullPlayerAndroidBackground: {
+    backgroundColor: '#8B3027',
+    backgroundImage: 'linear-gradient(180deg, #A73529 0%, #7A2C25 55%, #401C1B 100%)',
+  },
   fullPlayerScroll: {
     paddingHorizontal: 24,
     paddingTop: 0,
@@ -1900,6 +1838,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 16,
   },
+  trackDetailsAndroid: { marginTop: 0 },
   trackTextGroup: {
     flex: 1,
     marginRight: 16,
@@ -2010,6 +1949,8 @@ const styles = StyleSheet.create({
   fromBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 1,
+    minWidth: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.25)',
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -2033,6 +1974,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '600',
+    flexShrink: 1,
   },
   actionRightGroup: {
     flexDirection: 'row',

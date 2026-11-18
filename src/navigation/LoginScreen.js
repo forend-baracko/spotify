@@ -15,9 +15,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACE, RADIUS } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import PrimaryButton from '../components/buttons/PrimaryButton';
+import GoogleAuthButton from '../components/buttons/GoogleAuthButton';
+import AuthEmailField from '../components/auth/AuthEmailField';
+import AuthPasswordField from '../components/auth/AuthPasswordField';
 
 const LoginScreen = ({ navigation }) => {
-    const { login, loginGoogle, isConfigured } = useAuth();
+    const { login, loginGoogle, isConfigured, authBusy, authError, clearError } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -25,6 +28,12 @@ const LoginScreen = ({ navigation }) => {
     const [localError, setLocalError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const inFlight = useRef(false);
+    const busyElsewhere = Platform.OS === 'android' && authBusy && !isSubmitting && !isGoogleSubmitting;
+    const displayedError = Platform.OS === 'android' ? authError || localError : localError;
+    const clearFormError = () => {
+        if (localError) setLocalError('');
+        if (Platform.OS === 'android' && authError) clearError?.();
+    };
 
     const handleLogin = async () => {
         if (inFlight.current) return;
@@ -92,43 +101,46 @@ const LoginScreen = ({ navigation }) => {
                     )}
 
                     {/* Error Banner */}
-                    {!!localError && (
+                    {!!displayedError && (
                         <View style={styles.errorBox}>
-                            <Text style={styles.errorText}>{localError}</Text>
+                            <Text style={styles.errorText}>{displayedError}</Text>
                         </View>
                     )}
 
                     {/* Form Fields */}
                     <View style={styles.form}>
+                        {busyElsewhere ? <Text style={styles.label} accessibilityLiveRegion="polite">Authentication in progress. Please wait.</Text> : null}
                         <Text style={styles.label}>Email or username</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Email address"
-                            placeholderTextColor={COLORS.textMuted}
-                            value={email}
-                            onChangeText={(text) => {
-                                setEmail(text);
-                                if (localError) setLocalError('');
-                            }}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                            keyboardType="email-address"
-                        />
+                        {Platform.OS === 'android' ? (
+                            <AuthEmailField value={email} placeholder="Email address" onChangeText={(text) => { setEmail(text); clearFormError(); }} />
+                        ) : (
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Email address"
+                                placeholderTextColor={COLORS.textMuted}
+                                value={email}
+                                onChangeText={(text) => { setEmail(text); if (localError) setLocalError(''); }}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                keyboardType="email-address"
+                            />
+                        )}
 
                         <Text style={styles.label}>Password</Text>
                         <View style={styles.passwordContainer}>
-                            <TextInput
-                                style={styles.passwordInput}
-                                placeholder="Password"
-                                placeholderTextColor={COLORS.textMuted}
-                                value={password}
-                                onChangeText={(text) => {
-                                    setPassword(text);
-                                    if (localError) setLocalError('');
-                                }}
-                                secureTextEntry={!showPassword}
-                                autoCapitalize="none"
-                            />
+                            {Platform.OS === 'android' ? (
+                                <AuthPasswordField value={password} placeholder="Password" secure={!showPassword} autoComplete="current-password" onChangeText={(text) => { setPassword(text); clearFormError(); }} />
+                            ) : (
+                                <TextInput
+                                    style={styles.passwordInput}
+                                    placeholder="Password"
+                                    placeholderTextColor={COLORS.textMuted}
+                                    value={password}
+                                    onChangeText={(text) => { setPassword(text); if (localError) setLocalError(''); }}
+                                    secureTextEntry={!showPassword}
+                                    autoCapitalize="none"
+                                />
+                            )}
                             <TouchableOpacity
                                 style={styles.eyeButton}
                                 onPress={() => setShowPassword(!showPassword)}
@@ -140,7 +152,7 @@ const LoginScreen = ({ navigation }) => {
                         </View>
 
                         {/* Submit Button */}
-                        <PrimaryButton label="Log In" onPress={handleLogin} disabled={isGoogleSubmitting} loading={isSubmitting} />
+                        <PrimaryButton label="Log In" onPress={handleLogin} disabled={isGoogleSubmitting || busyElsewhere} loading={isSubmitting} />
 
                         {/* Divider */}
                         <View style={styles.dividerRow}>
@@ -150,21 +162,18 @@ const LoginScreen = ({ navigation }) => {
                         </View>
 
                         {/* Google Sign-In Button */}
-                        <TouchableOpacity
-                            style={[
-                                styles.googleButton,
-                                (isSubmitting || isGoogleSubmitting) && styles.disabledButton,
-                            ]}
-                            onPress={handleGoogleSignIn}
-                            disabled={isSubmitting || isGoogleSubmitting}
-                            activeOpacity={0.8}
-                        >
-                            {isGoogleSubmitting ? (
-                                <ActivityIndicator color={COLORS.white} />
-                            ) : (
-                                <Text style={styles.googleButtonText}>Continue with Google</Text>
-                            )}
-                        </TouchableOpacity>
+                        {Platform.OS === 'android' ? (
+                            <GoogleAuthButton onPress={handleGoogleSignIn} disabled={isSubmitting || busyElsewhere} loading={isGoogleSubmitting} />
+                        ) : (
+                            <TouchableOpacity
+                                style={[styles.googleButton, (isSubmitting || isGoogleSubmitting) && styles.disabledButton]}
+                                onPress={handleGoogleSignIn}
+                                disabled={isSubmitting || isGoogleSubmitting}
+                                activeOpacity={0.8}
+                            >
+                                {isGoogleSubmitting ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.googleButtonText}>Continue with Google</Text>}
+                            </TouchableOpacity>
+                        )}
                     </View>
 
                     {/* Register Switch */}

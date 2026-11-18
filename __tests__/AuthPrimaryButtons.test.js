@@ -1,12 +1,13 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { Text, TextInput, TouchableOpacity } from 'react-native';
+import { Platform, Text, TextInput, TouchableOpacity } from 'react-native';
 
 const mockLogin = jest.fn();
 const mockRegister = jest.fn();
 const mockGoogle = jest.fn();
 const mockSave = jest.fn();
-jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ login: mockLogin, register: mockRegister, loginGoogle: mockGoogle, saveUsername: mockSave, isConfigured: true, userProfile: null }) }));
+const mockLogout = jest.fn();
+jest.mock('../src/context/AuthContext', () => ({ useAuth: () => ({ login: mockLogin, register: mockRegister, loginGoogle: mockGoogle, saveUsername: mockSave, logout: mockLogout, isConfigured: true, userProfile: null }) }));
 require('../test-utils/expoIcons');
 const LoginScreen = require('../src/navigation/LoginScreen').default;
 const RegisterScreen = require('../src/navigation/RegisterScreen').default;
@@ -59,6 +60,18 @@ describe('native primary auth actions', () => {
     expect(input('username').props.onSubmitEditing).toBeUndefined();
     await ReactTestRenderer.act(async () => { finish(); await task; });
     expect(replace).toHaveBeenCalledWith('Home');
+  });
+
+  it('shows a pending-auth sign-out error on Android username setup', async () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+    mockLogout.mockRejectedValueOnce(new Error('Authentication is in progress. Please wait before signing out.'));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await render(SetUsernameScreen);
+      await ReactTestRenderer.act(async () => { await renderer.root.findByProps({ accessibilityLabel: 'Sign out of current account' }).props.onPress(); });
+      expect(hasText('Authentication is in progress. Please wait before signing out.')).toBe(true);
+    } finally { warn.mockRestore(); Platform.OS = originalPlatform; }
   });
 
   it('prevents simultaneous keyboard and button username submissions', async () => {

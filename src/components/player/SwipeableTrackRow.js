@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -32,11 +32,15 @@ const SwipeableTrackRow = ({
 }) => {
     const panX = useRef(new Animated.Value(0)).current;
     const currentPanX = useRef(0);
+    const currentAction = useRef({ track, onAddToQueue, onAddToPlaylist });
+    currentAction.current = { track, onAddToQueue, onAddToPlaylist };
 
-    // Keep track of currentPanX for snap calculations
-    panX.addListener(({ value }) => {
-        currentPanX.current = value;
-    });
+    useEffect(() => {
+        const listenerId = panX.addListener(({ value }) => {
+            currentPanX.current = value;
+        });
+        return () => panX.removeListener(listenerId);
+    }, [panX]);
 
     const resetPosition = (callback) => {
         Animated.spring(panX, {
@@ -78,15 +82,17 @@ const SwipeableTrackRow = ({
 
                 // 1. Swiping RIGHT -> Add to Queue
                 if (totalX > SWIPE_RIGHT_ACTION_THRESHOLD) {
-                    if (onAddToQueue) onAddToQueue(track);
+                    const { track: swipedTrack, onAddToQueue: addToQueue } = currentAction.current;
+                    if (addToQueue) addToQueue(swipedTrack);
                     resetPosition();
                     return;
                 }
 
                 // 2. Swiping LEFT -> Open Add to Playlist
                 if (totalX < -60) {
+                    const { track: swipedTrack, onAddToPlaylist: addToPlaylist } = currentAction.current;
                     resetPosition(() => {
-                        if (onAddToPlaylist) onAddToPlaylist(track);
+                        if (addToPlaylist) addToPlaylist(swipedTrack);
                     });
                     return;
                 }

@@ -92,6 +92,7 @@ const SetUsernameScreen = ({ navigation }) => {
             await logout();
         } catch (error) {
             console.warn('Logout failed:', error);
+            if (Platform.OS === 'android') setLocalError(error.message || 'Sign out failed. Please try again.');
         }
     };
 

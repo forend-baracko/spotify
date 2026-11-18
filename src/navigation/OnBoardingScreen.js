@@ -1,16 +1,20 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Platform } from 'react-native';
 import { COLORS, RADIUS, SPACE } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import PageOne from '../components/onboarding/PageOne';
 import PageTwo from '../components/onboarding/PageTwo';
 import PageThree from '../components/onboarding/PageThree';
+import PrimaryButton from '../components/buttons/PrimaryButton';
 
 export default function OnBoardingScreen({ navigation }) {
     const { completeOnboarding } = useAuth();
     const [currentPage, setCurrentPage] = useState(1);
+    const completionStarted = useRef(false);
 
     const finishOnboarding = () => {
+        if (Platform.OS === 'android' && completionStarted.current) return;
+        completionStarted.current = true;
         completeOnboarding?.();
         if (navigation?.replace) {
             navigation.replace('Login');
@@ -73,15 +77,13 @@ export default function OnBoardingScreen({ navigation }) {
                 </View>
 
                 {/* Continue / Get Started Button */}
-                <TouchableOpacity
-                    style={styles.continueButton}
-                    onPress={handleNext}
-                    activeOpacity={0.8}
-                >
-                    <Text style={styles.continueText}>
-                        {currentPage === 3 ? 'Get Started' : 'Continue'}
-                    </Text>
-                </TouchableOpacity>
+                {Platform.OS === 'android' ? (
+                    <PrimaryButton label={currentPage === 3 ? 'Get Started' : 'Continue'} onPress={handleNext} fullWidth />
+                ) : (
+                    <TouchableOpacity style={styles.continueButton} onPress={handleNext} activeOpacity={0.8}>
+                        <Text style={styles.continueText}>{currentPage === 3 ? 'Get Started' : 'Continue'}</Text>
+                    </TouchableOpacity>
+                )}
             </View>
         </SafeAreaView>
     );

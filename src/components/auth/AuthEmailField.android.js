@@ -1,0 +1,30 @@
+import React from 'react';
+import { StyleSheet } from 'react-native';
+import { Host, TextInput, useNativeState } from '@expo/ui';
+import { COLORS, SPACE, RADIUS } from '../../constants/theme';
+
+export default function AuthEmailField({ value, onChangeText, placeholder }) {
+  const nativeValue = useNativeState(value);
+  return (
+    <Host colorScheme="dark" style={styles.host} matchContents={{ vertical: true }}>
+      <TextInput
+        value={nativeValue}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        accessibilityLabel={placeholder}
+        placeholderTextColor={COLORS.textMuted}
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="email"
+        keyboardType="email-address"
+        textStyle={styles.text}
+        style={styles.input}
+      />
+    </Host>
+  );
+}
+const styles = StyleSheet.create({
+  host: { width: '100%', minHeight: 52, marginBottom: SPACE.sm },
+  text: { color: COLORS.textPrimary, fontSize: 15 },
+  input: { width: '100%', backgroundColor: COLORS.inputBackground, borderRadius: RADIUS.xs, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: SPACE.md, paddingVertical: SPACE.md },
+});
